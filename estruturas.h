@@ -44,7 +44,6 @@ typedef struct inode
 {
 	short int tipo; // 1 - arquivo, 2 - diretorio
 	int numero_inode; // numero do inode (talvez não seja necessário)
-	short int valido; // 1 para inode em uso, 0 para fora de uso
 	struct dataTime criacao;
 	struct dataTime acesso; 
 	int tamanho; // tamanho, em bytes, do conteúdo do arquivo
