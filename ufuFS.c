@@ -6,40 +6,107 @@ Este módulo contém funções relacionadas com a operação do sistema de arqui
 
 */
 
+#include<math.h>
+
+
 /*
-abrir_dispositivo
-------------------
-Entrada: String indicando o caminho até o device file do dispositivo de armazenamento que será acessado.
-Descrição:
-Saída: 
+alterar_bitmap
+---------------
+Entrada: inteiro, indicando a posição (em bits) a ser alterada, estrutura de superbloco para se obter informações de início do bitmap; inteiro, 1 para DATA, 2 para INODE
+Descrição: realiza a alteração da posição indicada
+Saída: 0, em fracasso, 1, em sucesso
 */
-int abrir_dispositivo(const char *pathname)
+int alterar_bitmap(int number, superblock sb, int tipo)
 {
-	// system call open para abrir o device file
-	// fstat para obter o tamanho em bytes do dispositivo
+	bitmap bm;
 
-}
+	// verificar se sb é válido
+	int bloco = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
 
-
-int alterar_bitmap()
-{
-	// PARA DADOS
-	// tendo em mãos o bloco que tem que ter o status alterado realizamos a operação:  NUM_BLOCK / (TAMANHO_BLOCK * 8) 
-	// o quociente será o bloco do bitmap (numeração começando com zero),
-	// Com o resto em mãos, dividimos por 8, obtendo assim o byte onde o indicador do bloco está localizado. 
-	// O novo resto será o offset da localização do bit referente.
-	// Logo, queremos inverter apenas aquele bit do byte em específico.
-	// podemos fazer isso copiando o byte, e de acordo com a operação fazer +- 1 * 2^NOVO_RESTO
-	//  então aplicamos bitwase XOR (^)
-	// escrever o bloco
-
-
-	// PARA INODES
-	// Oq muda em relação ao bitmap_dados é que invés de NUM_BLOCK a função receberá o INODE_NUMBER 
-	// com isso, precisaremos de apenas uma função.
+	bloco = bloco + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
+	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
+	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
 	
-	// usamos unsigned char para operar sobre cada byte 
+	// VERIFICA SE OS VALORES OBTIDOS FAZEM SENTIDO
+	
+	if( ler_bloco(bloco,&(bm.mat)) == 0)
+		return 0;
+	
+	bm.mat[offset] = inverter_bit(bm.mat[offset],final_offset);
+	
+	if(escrever_bloco(bloco,&(bm.mat)) == 0)
+		return 0;
+	
+	return 1; 
 }
+
+unsigned char inverter_bit(unsigned char valor, int pos)
+{
+	int i = 7,h;
+	int resto, aux;
+	char vetor[8] = {'0','0','0','0','0','0','0','0'};
+	
+	aux = valor;
+	while(aux != 0)
+	{
+		resto = aux % 2;
+		aux /= 2;
+		
+		vetor[i] = resto == 1 ? '1' : '0';
+		i--;
+	}
+	
+	vetor[pos] = vetor[pos] == '1'? '0' : '1'; // inverte o bit da posição requerida
+	
+	aux = 0;
+	for(i = 7, h = 0; i >= 0; i--, h++)
+	{
+		aux += (vetor[i] == '1'? 1 : 0) * pow(2,h);
+	}
+	
+	return aux;	
+}
+
+/*
+get_bitmap_pos_status
+---------------
+Entrada: inteiro, indicando a posição (em bits) a ser alterada, estrutura de superbloco para se obter informações de início do bitmap; inteiro, 1 para DATA, 2 para INODE
+Descrição: retorna o bit da posição indicada
+Saída: -1 em falha, um inteiro não negativo em sucesso
+*/
+int get_bitmap_pos_status(int number, superblock sb, int tipo)
+{
+	bitmap bm;
+
+	// verificar se sb é válido
+	int bloco = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
+
+	bloco = bloco + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
+	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
+	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
+	
+	// VERIFICA SE OS VALORES OBTIDOS FAZEM SENTIDO
+	
+	if( ler_bloco(bloco,&(bm.mat)) == 0)
+		return 0;
+
+	int i = 7,h;
+	int resto, aux;
+	char vetor[8] = {'0','0','0','0','0','0','0','0'};
+	
+	aux = bm.mat[offset];
+	while(aux != 0)
+	{
+		resto = aux % 2;
+		aux /= 2;
+		
+		vetor[i] = resto == 1 ? '1' : '0';
+		i--;
+	}
+
+	return atoi(vetor[final_offset]);
+}
+
 
 int carregar_bitmap()
 {

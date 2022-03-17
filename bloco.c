@@ -8,9 +8,44 @@ Todas as system calls nesse módulo estarão operando em cima do file descriptor
 As funções com parâmetros tipo void necessitam deles pois os dados não tem tipo definido em disco.
 */
 
+#include<stdio.h>
 #include"estruturas.h"
 #include<sys/types.h>
 #include<unistd.h>
+
+int fd; // armazena o file descriptor do device file
+int block_number; // quantidade de blocos no dispositivo
+
+/*
+abrir_dispositivo
+------------------
+Entrada: String indicando o caminho até o device file do dispositivo de armazenamento que será acessado.
+Descrição: abre o device file responsável pelo dispositivo que queremos acessar/formatar
+Saída: -1, em fracasso, o tamanho em blocos do disco em sucesso
+*/
+int abrir_dispositivo(const char *pathname)
+{
+	struct stat info;
+	
+	fd = open(pathname, O_RDWR);
+	
+	if(fd < 0)
+	{
+		fprintf(stderr,"\nFalha no acesso ao disco %s.\n",pathname);
+		return - 1;
+	}
+	
+	if( fstat(fd,%info) < 0)
+	{
+		fprintf(stderr,"\nFalha na obtenção de informações sobre o disco.\n");
+		return -1;
+	}
+	
+	block_number = info.st_size / BLOCK_SIZE;
+	
+	return block_number;
+}
+
 
 /*
 ler_bloco
@@ -21,10 +56,16 @@ Saída: 0, em erro, 1, em sucesso
 */
 int ler_bloco(unsigned int num_bloco, void *bloco)
 {
-	// verifica se o num_bloco é válido (menor que o número máximo de blocos) 
-	// usa lseek pra reposicionar o "cursor" para o bloco requerido
-	// usa read para ler o bloco (é necessário informar o tamanho de um bloco)
-
+	if(num_bloco >= block_number)
+		return 0; // verificação de validade do bloco
+	
+	// system call lseek reposiciona o "cursor" do arquivo.
+	// SEEK_SET estabelece que é na posição (num_bloco * BLOCK_SIZE)	
+	if( lseek(fd, num_bloco * BLOCK_SIZE, SEEK_SET) < 0)
+		return 0;
+		
+	read(fd, bloco, BLOCK_SIZE);
+	return 1;
 }
 
 /*
@@ -36,18 +77,60 @@ Saída: 0, em erro, 1, em sucesso
 */
 int escrever_bloco(unsigned int num_bloco, void *bloco)
 {
-	// verifica se o num_bloco é válido
-	// usa lseek para reposicionar o "cursor" para o bloco requerido
-	// usa write para escrever o bloco (é necessário informar o tamanho de um bloco)
-	// como ocorreu uma escrita de um bloco e queremos que isso seja passado imediatamente para o disco, usamos fsync para forçar isso.
+	if(num_bloco >= block_number)
+		return 0; // verificação de validade do bloco
+	
+	if( lseek(fd, num_bloco * BLOCK_SIZE, SEEK_SET) < 0)
+		return 0;
+		
+	write(fd, bloco, BLOCK_SIZE);
+	fsync(fd); // sincroniza com o disco
+	
+	return 1;
 }
 
-
-/* 
-para ler e escrever em um inode específico teremos que ter o valor de INODES_POR_BLOCO definido.
-Fazemos INODE_NUM / INODES_POR_BLOCO. O quociente vai ser o bloco a ser obtemos por meio da função ler_bloc.
-O resto será o offset dentro do bloco. Com isso acessaremos o inode especificado.
+/*
+read_inode
+-----------
+Entrada: inteiro indicando o número do inode a ser lido; ponteiro para tipo void para onde o inode deve ser copiado
+Descrição: realiza leitura de um inode
+Saída: 0, em falha, 1, em sucesso
 */
+int read_inode(unsigned int num_inode, void *inode)
+{
+	// VERIFICAR SE ESTÁ DENTRO DOS LIMITES DE INODES
+
+	int bloco = num_inode / INODE_IN_A_BLOCK;
+	int offset = num_inode % INODE_IN_A_BLOCK;
+
+	if( lseek(fd, (bloco * BLOCK_SIZE) + offset * sizeof(inode), SEEK_SET) < 0)
+		return 0;	
+	
+	read(fd,inode, sizeof(inode));
+	return 1;
+}
+
+/*
+write_inode
+-----------
+Entrada: inteiro indicando o número do inode a ser escrito; ponteiro para tipo void para onde o inode a ser escrito está
+Descrição: realiza leitura de um inode
+Saída: 0, em falha, 1, em sucesso
+*/
+int write_inode(unsigned int num_inode, void *inode)
+{
+	// VERIFICAR SE ESTÁ DENTRO DOS LIMITES DE INODES
+
+	int bloco = num_inode / INODE_IN_A_BLOCK;
+	int offset = num_inode % INODE_IN_A_BLOCK;
+
+	if( lseek(fd, (bloco * BLOCK_SIZE) + offset * sizeof(inode), SEEK_SET) < 0)
+		return 0;	
+	
+	write(fd,inode, sizeof(inode));
+	return 1;
+}
+
 
 /*
 	Funções necessárias relacionadas a blocos, mas que talvez nao precisem estar aqui.
