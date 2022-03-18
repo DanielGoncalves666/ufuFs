@@ -138,4 +138,34 @@ int write_inode(unsigned int num_inode, void *inode)
 	obter_inode_livre --> retorna o primeiro inode que não estiver sendo ocupado.
 */
 
+/*
+obter_inode_livre
+------------------
+Entrada: estrutura de superbloco para se obter informações de início do bitmap
+Descrição: 
+Saída:
+*/
+int obter_inode_livre(superblock sb)
+{
+	bitmap bm;
+
+	for(int i = sb.inode_bitmap_begin; i < /*QUANTIDADE DE BLOCOS DO BITMAP*/; i++)
+	{
+		ler_bloco( i, &(bm.mat));
+		
+		for(int h = 0; h < BLOCK_SIZE; h++)
+		{
+			if(bm.mat[h] != 255)
+			{
+				// encontrou um inode livre
+				
+				// calcular qual bit que é
+				// baseando-se em i e h, além do bit, calcular qual é o número do primeiro inode livre
+			}
+		}
+	
+	}
+}
+
+
 #endif

@@ -21,15 +21,15 @@ int alterar_bitmap(int number, superblock sb, int tipo)
 	bitmap bm;
 
 	// verificar se sb é válido
-	int bloco = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
+	int b = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
 
-	bloco = bloco + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
+	b = b + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
 	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
 	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
 	
 	// VERIFICA SE OS VALORES OBTIDOS FAZEM SENTIDO
 	
-	if( ler_bloco(bloco,&(bm.mat)) == 0)
+	if( ler_bloco(b,&(bm.mat)) == 0)
 		return 0;
 	
 	bm.mat[offset] = inverter_bit(bm.mat[offset],final_offset);
@@ -79,15 +79,15 @@ int get_bitmap_pos_status(int number, superblock sb, int tipo)
 	bitmap bm;
 
 	// verificar se sb é válido
-	int bloco = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
+	int b = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
 
-	bloco = bloco + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
+	b = b + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
 	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
 	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
 	
 	// VERIFICA SE OS VALORES OBTIDOS FAZEM SENTIDO
 	
-	if( ler_bloco(bloco,&(bm.mat)) == 0)
+	if( ler_bloco(b,&(bm.mat)) == 0)
 		return 0;
 
 	int i = 7,h;
@@ -115,8 +115,31 @@ int carregar_bitmap()
 
 }
 
-int open()
+int open(char *pathname)
 {
+	char *token;
+	inode dir;
+	
+	int retorno = read_inode(0,&dir); // dir agora tem o inode do raiz
+	if(!retorno)
+		return -1;
+		
+	while(1)
+	{
+		token = strtok(pathname, "/");
+		// se token for uma string vazia então temos em dir o inode do arquivo que queremos
+		if(token[0] == '\0')
+			break;
+		
+		while(1)
+		{
+			// percorre cada entrada do diretório em questão procurando pela próxima entrada
+				// quando encontrar lê o inode para dir
+			// se não encontrar a entrada, retorna -1
+			
+		}
+	}
+
 	/*
 		recebe o pathname
 		precisamos usar strtok com delimitador '/' para ir quebrando o caminho até chegar no arquivo
@@ -127,18 +150,42 @@ int open()
 
 }
 
-int read()
+/*
+ufufs_read
+----------
+Entrada: inteiro indicando o file descriptor do arquivo, ponteiro para o posição da memória onde os dados lidos devem ser armazenados, inteiro indicando a quantidade de bytes a serem lidos
+Descrição: 
+Saída: -1 em falha, quantidade de bytes lidos em sucesso
+*/
+int ufufs_read(int fd, void *buffer, int qtd)
 {
+	// teremos que usar a estrutura em memória do inode, essa estrutura vai ter um valor chamado de CURSOR que indica o proximo byte a ser lido
+	// em falta dessa estrutura, referencia a esse valor será dada por CURSOR
+	
+	int b = CURSOR / BLOCK_SIZE; //determina o bloco de dados onde está o próximo byte a ser lido
+	int pode_lido = BLOCK_SIZE - (CURSOR % BLOCK_SIZE);//quantidade de bytes que podem ser lidos do primeiro bloco 
+
+	//  void *memcpy(void *dest, const void *src, size_t n);
+
 	/*
 		recebe o file descriptor obtido por meio do open
 		realizamos então uma busca pelos ponteiros de dados pelo bloco que contém os bytes requeridos
-		
-	
 	*/
 }
 
-int write()
+/*
+ufufs_write
+----------
+Entrada: inteiro indicando o file descriptor do arquivo, ponteiro para o posição da memória onde os dados a serem escritos estão armazenados, inteiro indicando a quantidade de bytes a serem escritos
+Descrição: 
+Saída: -1 em falha, quantidade de bytes escritos em sucesso
+*/
+int ufufs_write(int fd, void *buffer, int qtd)
 {
+	// verifica se CURSOR (consultar explicação em ufufs_read) é 0, nesse caso todos os data_blocks devem ser desconsiderados e liberados se não forem ocupados
+	// se o CURSOR for maior que zero é pra colocar os novos bytes à partir dessa posição alocando novos data_blocks sempre que necessário
+
+
 	/*
 		recebe o file descriptor obtido por meio do open
 		teremos que verificar se é pra fazer append ou se é pra reescrever o arquivo
@@ -146,7 +193,7 @@ int write()
 	*/
 }
 
-int seek()
+int ufufs_seek(int fd)
 {
 	/*
 		recebe o file descriptr obtido por meio do open
@@ -155,7 +202,7 @@ int seek()
 	*/
 }
 
-int close()
+int ufufs_close(int fd)
 {
 	/*
 		recebe o file descriptr obtido por meio do open
