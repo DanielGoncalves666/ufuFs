@@ -2,14 +2,15 @@
 #define ESTRUTURAS_H
 
 #define MAXIMUM_NAME_LENGTH 10
-#define BLOCK_SIZE 4096
 #define ROOT_DIRECTORY_INODE 0
-
+#define BLOCO_INVALIDO 0
 #define ARQUIVO 1
 #define DIRETORIO 2
-#define BLOCO_INVALIDO 0
-#define UFUFS_MAGIC_NUMBER 11111
+#define UFUFS_MAGIC_NUMBER 123456
+#define BLOCK_SIZE 4096
 
+int inode_number; // quantidade de inodes
+int inodes_in_a_block;// quantidade de inodes em um bloco
 
 struct dataTime
 {
@@ -32,37 +33,35 @@ typedef struct superblock
 
 typedef struct bloco_indireto
 {
-	unsigned int blocos[BLOCK_SIZE / 4];
+	unsigned int *blocos;
 } bloco_indireto;
 
 typedef struct inode
 {
 	short int tipo; // 0 - invalido, 1 - arquivo, 2 - diretorio
-	unsigned int numero_inode; // numero do inode
 	struct dataTime criacao;
 	struct dataTime acesso; 
-	int tamanho; // tamanho, em bytes, do conteúdo do arquivo
+	int tamanho; // tamanho, em bytes, se for um arquivo. tamanho, em quantidade de entradas, se for um diretório.
 	
-	unsigned int blocos[10]; // armazena os numeros para os blocos de dados diretos (0, que sempre é o superbloco, indica q é inválido) -- 10 * 4KB = 40KB
-	unsigned int ind_bloco; // indica o bloco de dados onde está a estrutura bloco_indireto (0, que sempre é o superbloco, indica q é inválido) -- 1024 * 4KB = 4MB
-	unsigned int dup_ind_bloco; // indica um bloco que está preenchido com indicadores para blocos indiretos -- 1024 * 1024 * 4KB = 4GB
-
+	int blocos[10]; // armazena os numeros para os blocos de dados diretos (-1 é invalido) -- 10 * 4KB = 40KB
+	int ind_bloco; // indica o bloco de dados onde está a estrutura bloco_indireto (-1 é invalido) -- 1024 * 4KB = 4MB
+	int dup_ind_bloco; // indica um bloco que está preenchido com indicadores para blocos indiretos -- 1024 * 1024 * 4KB = 4GB
 } inode;
-const int INODE_IN_A_BLOCK = BLOCK_SIZE / sizeof(inode);
-
-struct bloco
-{
-	unsigned char mat[BLOCK_SIZE];
-};
-
-typedef struct bloco bloco;
-typedef struct bloco bitmap;
-
 
 typedef struct dir_entry
 {
-	char nome[11];
 	int numero_inode;
+	char nome[11];
 } dir_entry;
+
+long int abrir_dispositivo(const char *pathname, int *fd);
+int ler_bloco(int fd, unsigned int num_bloco, void *bloco);
+int escrever_bloco(int fd, unsigned int num_bloco, void *bloco);
+int read_inode(int fd, unsigned int file_table_begin, unsigned int num_inode, void *inode);
+int write_inode(int fd,  unsigned int file_table_begin, unsigned int num_inode, void *inode);
+int obter_inode_livre(int fd, superblock sb);
+int localizar_bit(unsigned char valor);
+int alterar_bitmap(int fd, int number, superblock sb, int tipo);
+unsigned char inverter_bit(unsigned char valor, int pos);
 
 #endif
