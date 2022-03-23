@@ -10,6 +10,7 @@ As funções com parâmetros tipo void necessitam deles pois os dados não tem t
 
 #include<stdio.h>
 #include<stdlib.h>
+#include<string.h>
 #include<math.h>
 #include"estruturas.h"
 #include<sys/types.h>
@@ -110,6 +111,8 @@ int read_inode(int fd, unsigned int file_table_begin, unsigned int num_inode, vo
 	if(fd < 0)
 		return 0; // file descriptor inválido
 
+	// verificar se o inode é válido
+
 	if(num_inode >= inode_number)
 		return 0;
 
@@ -182,7 +185,7 @@ int obter_inode_livre(int fd, superblock sb)
 			if(bitmap[h] != 255) // procura pelo primeiro byte que não tem apenas 1's
 			{
 				num_inode += h * 8;
-				return num_inode + localizar_bit(bitmap[h]);
+				return num_inode + localizar_bit(bitmap[h],'0',-1);
 			}
 		}
 		num_inode += BLOCK_SIZE * 8;
@@ -195,10 +198,12 @@ int obter_inode_livre(int fd, superblock sb)
 localizar_bit
 --------------
 Entrada: unsigned char, contendo o byte
-Descrição: procura pelo primeiro zero da esquerda pra direta
+         caracter, indicando o bit procurado, '0', ou '1'
+         inteiro, indicando o sentido, -1 pra esquerda pra direita e 1 da direita pra esquerda
+Descrição: procura pelo primeiro bit dado no sentido indicado
 Saída: inteiro indicando o primeiro zero, da esquerda pra direita; -1 se não existir nenhum
 */
-int localizar_bit(unsigned char valor)
+int localizar_bit(unsigned char valor, char bit, int sentido)
 {
 	char vetor[8] = {'0','0','0','0','0','0','0','0'};
 	int i = 7, resto, aux;
@@ -215,9 +220,10 @@ int localizar_bit(unsigned char valor)
 	}	
 	// preenche o vetor da direita pra esquerda de modo a deixar nele o número na ordem correta
 	
-	for(i = 0; i < 7; i++)
+	i = sentido == -1 ? 0 : 7;
+	for(; i < (sentido == -1 ? 7 : 0); i += (sentido == -1? 1 : -1))
 	{
-		if(vetor[i] == '0')
+		if(vetor[i] == bit)
 			return i;
 	}
 
@@ -288,5 +294,115 @@ unsigned char inverter_bit(unsigned char valor, int pos)
 	return aux;	
 }
 
+/*
+get_bitmap_pos_status
+---------------
+Entrada: inteiro, indicando a posição (em bits) a ser alterada, estrutura de superbloco para se obter informações de início do bitmap; inteiro, 1 para DATA, 2 para INODE
+Descrição: retorna o bit da posição indicada
+Saída: -1 em falha, um inteiro não negativo em sucesso
+*/
+int get_bitmap_pos_status(int number, superblock sb, int tipo)
+{
+	bitmap bm;
+
+	// verificar se sb é válido
+	int b = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
+
+	b = b + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
+	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
+	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
+	
+	// VERIFICA SE OS VALORES OBTIDOS FAZEM SENTIDO
+	
+	if( ler_bloco(b,&(bm.mat)) == 0)
+		return 0;
+
+	int i = 7,h;
+	int resto, aux;
+	char vetor[8] = {'0','0','0','0','0','0','0','0'};
+	
+	aux = bm.mat[offset];
+	while(aux != 0)
+	{
+		resto = aux % 2;
+		aux /= 2;
+		
+		vetor[i] = resto == 1 ? '1' : '0';
+		i--;
+	}
+
+	return atoi(vetor[final_offset]);
+}
+
+/*
+get_block_sequence
+-------------------
+Entrada: inteiro, indicando o file descript do dispositivo
+		 inteiro, indicando o primeiro bloco do bitmap a ser vasculhado (0 para ser o primerio bloco do bitmap)
+		 superblock, contendo as informações do superblock do sistema de arquivos
+		 inteiro, indicando a quantidade de blocos necessária na sequência
+Descrição: Procura por uma sequência de blocos de dados suficiente para o arquivo
+Saída: -1, se nenhuma sequencia foi encontra, um inteiro, indicando o bloco que inicia a sequencia.
+*/
+int get_block_sequence(int fd, int comeco, superblock sb, int qtd)
+{
+	
+	unsigned char *data_block = (unsigned char *) calloc(1,BLOCK_SIZE);
+	int min_completos = (qtd / 8); // quantidade minima de bytes que precisam estar zerados, podem sobrar até 7 bits
+	int resto = qtd % 8;
+	unsigned char *vazio = (unsigned char *) calloc(1,min_completos);
+
+	int j,k,i,h;
+	int aux,antes = 0,depois;
+
+	for(i = sb.data_bitmap_begin + comeco, j = 0; i < sb.file_table_begin; i++, j++)
+	{
+		ler_bloco(fd,i,data_block);
+		
+		for(h = 0; h < BLOCK_SIZE - min_completos - 1; h++)
+		{
+			if( memcmp(data_block + h, vazio, min_completos) == 0) // procura pela quantidade determinada de blocos zerados seguidos
+			{
+				antes = 0;
+				if(h > 0) // se não começar no primeiro byte, verifica o anterior
+				{
+					antes = 8 - localizar_bit(*(data_block + h),'1',1); // quantidade de bits zerados na direita do byte
+					aux = resto - antes; // quantidade de bits fora de bytes a serem alocados
+				}
+				else
+					aux = resto;
+					
+				if(aux <= 0)
+					return j * (BLOCK_SIZE * 8) + (h * 8) - antes;
+									
+				depois = localizar_bit(*(data_block + h + min_completos),'1',-1);// quantidade de bits zerados à esquerda do byte
+				aux -= depois;
+				
+				if(aux <= 0)
+					return j * (BLOCK_SIZE * 8) + (h * 8) - antes;
+			}
+		
+		}
+		
+		for(k = 1;h < BLOCK_SIZE; h++, k++)
+		{
+			if( memcmp(data_block + h, vazio, min_completos - k) == 0)
+			{
+				antes = 0;
+				if(h > 0)
+				{
+					antes = 8 - localizar_bit(*(data_block + h),'1',1); // quantidade de bits zerados na direita do byte
+				}
+				
+				if(get_block_sequence(fd, (i - comeco) + 1, qtd - (8 *(min_completos - k) + antes)) == (i + 1)*(BLOCK_SIZE * 8))// caso retorne a primeira posição do proximo bloco então temos uma área contigua 
+					return j * (BLOCK_SIZE * 8) + (h * 8) - antes;
+						
+			}
+		}
+	
+	}
+
+	return -1;
+}
 
 #endif

@@ -14,6 +14,7 @@ Módulo de formatação
 #include"estruturas.h"
 #include <unistd.h>
 
+#define INODE_RATIO 0.05
 
 // abrir o device file e obter o tamanho do disco.
 // calcular a quantidade de blocos
@@ -31,10 +32,10 @@ inode criar_inode_raiz();
 int main()
 {
 	char pathname[25];
-	int *buffer;
-	unsigned char *bc;
-	int size, resul;  
 	static int div_fd;
+	int size, resul, entrada;
+	superblock sb;
+	void *bc;
 
 	// COLOCAR PRINTFS
 	scanf("%s",pathname);
@@ -43,14 +44,17 @@ int main()
 	if(size == -1)
 		return 0; // falha
 	
-	bc = (unsigned char *) calloc(1,BLOCK_SIZE);
+	bc = calloc(1,BLOCK_SIZE);
 	resul = ler_bloco(div_fd,0,bc); // carrega o bloco onde o superblock deveria estar
 	if(resul == 0)
 		return 0; // falha
 
-	memcpy(buffer, bc, 4);
-	if(*buffer == UFUFS_MAGIC_NUMBER)
+	memcpy(&sb, bc, sizeof(superblock));
+	free(bc);
+	if(sb.magic_number == UFUFS_MAGIC_NUMBER)
 	{
+		printf("\n Sistema de Arquivos ufuFS detectado, deseja sobreescrever?\n 1 - Sim\n 2 - Não\n");
+
 		// já existe sistema de arquivos
 			// perguntar se quer sobreescrever
 				// se sim, continua normalmente
@@ -62,14 +66,12 @@ int main()
 		// soft deixa os blocos de dados do jeito que estão e atua apenas nas estruturas de matadados
 
 	inodes_in_a_block =  BLOCK_SIZE / sizeof(inode);	 
-	inode_number = (size * 0.05) * inodes_in_a_block;
-
-	superblock sb;
+	inode_number = (size * INODE_RATIO) * inodes_in_a_block;
 	  
 	sb.magic_number = UFUFS_MAGIC_NUMBER;
 	sb.block_number = size;
 	sb.block_size = BLOCK_SIZE;
-	sb.inode_table_length = size * 0.05; // 10% de todos os blocos
+	sb.inode_table_length = size * INODE_RATIO; // 5% de todos os blocos
 	sb.inode_bitmap_begin = 1;
     sb.data_bitmap_begin = sb.inode_bitmap_begin + (int) ceil(inode_number / (BLOCK_SIZE * 8));  
     
@@ -79,12 +81,12 @@ int main()
 	sb.file_table_begin = sb.data_bitmap_begin + qtd_data_bitmap; 
 	sb.data_table_begin = sb.file_table_begin + sb.inode_table_length;
 
-	void *empty_block = calloc(1,BLOCK_SIZE);
+	bc = calloc(1,BLOCK_SIZE);
 	
+	// limpa o superbloco, bitmaps e a file_table
 	for(int i = 0; i < sb.data_table_begin; i++)
 	{
-		// limpa o superbloco, bitmaps e a file_table
-		escrever_bloco(div_fd,i,empty_block);
+		escrever_bloco(div_fd,i,bc);
 	}
 	
 	if(/*se o usuario tiver escolhido hard format*/ 0 )
@@ -92,7 +94,7 @@ int main()
 		for(int i = sb.data_table_begin; i < size; i++)
 		{
 			// limpa o data_table
-			if(escrever_bloco(div_fd,i,empty_block) == 0)
+			if(escrever_bloco(div_fd,i,bc) == 0)
 			{
 				fprintf(stderr,"\nFalha na escrita\n");
 				return 0;
@@ -109,6 +111,7 @@ int main()
 	printf("%u\n",sb.file_table_begin);
 	printf("%u\n\n",sb.data_table_begin);
 
+	/*
 	int offset = 0;
 	memcpy(empty_block + offset,&sb.magic_number,sizeof(int));
 	offset += sizeof(int);
@@ -125,15 +128,15 @@ int main()
 	memcpy(empty_block + offset,&sb.file_table_begin,sizeof(unsigned int));
 	offset += sizeof(unsigned int);
 	memcpy(empty_block + offset,&sb.data_table_begin,sizeof(unsigned int));
+	*/
+	
+	memcpy(bc,&sb,sizeof(superblock));
 
-	// escrever superblock
-	//memcpy(empty_block,&sb,sizeof(superblock));
-	if(escrever_bloco(div_fd,0,empty_block) == 0)
+	if(escrever_bloco(div_fd,0,bc) == 0)
 	{
 		printf("falha na escrita do superblock\n");
 	}
-	
-	// escrever inode raiz
+	free(bc);
 
 	// verificar sucesso
 	inode raiz = criar_inode_raiz();// cria inode raiz
@@ -141,12 +144,13 @@ int main()
 	write_inode(div_fd,sb.file_table_begin,0, &raiz); // escreve o inode em disco
 	
 	dir_entry itself = {0,"."}; // cria a entrada que aponta pro próprio diretório
-	void *data_block = calloc(1,BLOCK_SIZE); // cria um bloco vazio
-	memcpy(data_block,&itself,sizeof(dir_entry)); // copia o dir_entry pro bloco vazio
-	escrever_bloco(div_fd, sb.data_table_begin, data_block); // escreve o bloco que contém a entrada itself
+	bc = calloc(1,BLOCK_SIZE); // cria um bloco vazio
+	memcpy(bc,&itself,sizeof(dir_entry)); // copia o dir_entry pro bloco vazio
+	escrever_bloco(div_fd, sb.data_table_begin, bc); // escreve o bloco que contém a entrada itself
 	
 	alterar_bitmap(div_fd,0,sb,1); // marca a posição dado 0 como ocupada
 
+	free(bc);
 	close(div_fd);
 	
 	printf("\n--- Formatado ---\n");
@@ -160,7 +164,7 @@ inode criar_inode_raiz()
 	time_t raw = time(NULL);
 	agora = localtime(&raw);
 	
-	raiz.tipo = 2;
+	raiz.tipo = DIRETORIO;
 	raiz.criacao.dia = agora->tm_mday;
 	raiz.criacao.mes = agora->tm_mon + 1; 
 	raiz.criacao.ano = agora->tm_year + 1900;
@@ -169,16 +173,10 @@ inode criar_inode_raiz()
 	raiz.criacao.segundo = agora->tm_sec;
 	
 	raiz.acesso = raiz.criacao;
-	raiz.tamanho = 1;
+	raiz.tamanho = 1 * sizeof(dir_entry);
 	
-	raiz.blocos[0] = 0; // primeiro bloco da data table
-	for(int i = 1; i < 10; i++)
-	{
-		raiz.blocos[i] = -1;
-	}
-	
-	raiz.ind_bloco = -1;
-	raiz.dup_ind_bloco = -1;
+	raiz.bloco_inicial = 0;
+	raiz.bloco_final = 0;
 
 	return raiz;
 }

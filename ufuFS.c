@@ -8,61 +8,57 @@ Este módulo contém funções relacionadas com a operação do sistema de arqui
 
 #include<math.h>
 
+#define MAXIMUM_OPEN_FILES
 
-/*
-get_bitmap_pos_status
----------------
-Entrada: inteiro, indicando a posição (em bits) a ser alterada, estrutura de superbloco para se obter informações de início do bitmap; inteiro, 1 para DATA, 2 para INODE
-Descrição: retorna o bit da posição indicada
-Saída: -1 em falha, um inteiro não negativo em sucesso
-*/
-int get_bitmap_pos_status(int number, superblock sb, int tipo)
+extern superblock sb;
+extern fd = -1;
+extern file_descriptor fd_table[MAXIMUM_OPEN_FILES];
+
+int ufufs_mount(char *dispositivo)
 {
-	bitmap bm;
-
-	// verificar se sb é válido
-	int b = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
-
-	b = b + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
-	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
-	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
+	int num_blocks;
+	int magic_number;
+	void *primeiro_bloco = calloc(1,BLOCK_SIZE);
 	
-	// VERIFICA SE OS VALORES OBTIDOS FAZEM SENTIDO
-	
-	if( ler_bloco(b,&(bm.mat)) == 0)
-		return 0;
-
-	int i = 7,h;
-	int resto, aux;
-	char vetor[8] = {'0','0','0','0','0','0','0','0'};
-	
-	aux = bm.mat[offset];
-	while(aux != 0)
+	num_blocks = abrir_dispositivo(dispositivo,&fd);
+	if(num_blocks < 0)
 	{
-		resto = aux % 2;
-		aux /= 2;
-		
-		vetor[i] = resto == 1 ? '1' : '0';
-		i--;
+		return -1;
 	}
-
-	return atoi(vetor[final_offset]);
-}
-
-
-int carregar_bitmap()
-{
-	// carregaria o bitmap para a memória
-	// a operação seria composto de carregar os blocos de cada bitmap
-
-}
-
-int open(char *pathname)
-{
-	char *token;
-	inode dir;
 	
-	int retorno = read_inode(0,&dir); // dir agora tem o inode do raiz
+	if(ler_bloco(fd,0,primeiro_bloco) == 0)
+	{
+		return -1
+	}
+	
+	memcpy(&magic_number,primeiro_bloco,sizeof(int));
+	if(magic_number != UFUFS_MAGIC_NUMBER)
+	{
+		fprintf(stderr,"\nufuFS não identificado\n");
+		return -1;
+	}
+	
+	memcpy(&sb,primeiro_bloco,sizeof(superblock)); // carrega o superblock em memória
+	
+	for(int i = 0; i < MAXIMUM_OPEN_FILES; i++)
+	{
+		fd_table[i] = -1;
+	}
+	
+	free(primeiro_bloco);
+	return 0;
+}
+
+
+int ufufs_open(char *pathname)
+{
+	char token[MAXIMUM_NAME_LENGTH + 1];
+	int i,h,qtd,offset;
+	inode atual;
+	dir_entry entrada;
+	void *buffer = calloc(1,BLOCK_SIZE);
+	
+	int retorno = read_inode(fd,sb.file_table_begin,0,&atual);// carrega o inode do diretório raiz
 	if(!retorno)
 		return -1;
 		
@@ -73,23 +69,57 @@ int open(char *pathname)
 		if(token[0] == '\0')
 			break;
 		
-		while(1)
+		h = 0;
+		qtd = atual.tamanho / sizeof(dir_entry);
+		for(i = atual.bloco_inicial; i <= atual.bloco_final; i++)
 		{
-			// percorre cada entrada do diretório em questão procurando pela próxima entrada
-				// quando encontrar lê o inode para dir
-			// se não encontrar a entrada, retorna -1
+			ler_bloco(fd, sb.data_bitmap_begin + i, buffer);
+			offset = 0;
+			while(h < qtd)
+			{
+				memcpy(&entrada,buffer + offset,sizeof(dir_entry));
+				offset += sizeof(dir_entry);
+				
+				if(entrada.numero_inode == -1)
+				{
+					// inválida
+					continue;
+				}	
+				
+				if( strcmp(token,entrada.nome) == 0)
+				{
+					// verifica se a entrada é a mesma que o nome
+					read_inode(fd,sb.file_table_begin,entrada.numero_inode,&atual);
+					h = -1;
+					break;
+				}
+				
+				h++;
+			}
 			
+			if(h == qtd)
+				return -1;
+			
+			if(h == -1)
+				break;	
 		}
 	}
 
-	/*
-		recebe o pathname
-		precisamos usar strtok com delimitador '/' para ir quebrando o caminho até chegar no arquivo
-		procuramos pelo arquivo ou diretório, alocamos uma estrutura do tipo inode e a preenchemos
-		usamos um vetor de file descriptors e damos para o inode criado um numero
-	
-	*/
+	free(buffer);
+	for(i = 0; i < MAXIMUM_OPEN_FILES; i++)
+	{
+		if(fd_table[i] == -1)
+			continue;		
+		
+		fd_table[i].inode_data = atual;
+		strcpy(fd_table.nome,entrada.nome);
+		fd_table.offset = 0;
+		
+		return i;
+	}
 
+	fprintf(stderr,"\nQuantidade máxima de arquivos abertos atingida.\n");
+	return -1;
 }
 
 /*
@@ -135,7 +165,7 @@ int ufufs_write(int fd, void *buffer, int qtd)
 	*/
 }
 
-int ufufs_seek(int fd)
+int ufufs_seek(int fd, int offset, int flags)
 {
 	/*
 		recebe o file descriptr obtido por meio do open

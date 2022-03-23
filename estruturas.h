@@ -12,6 +12,8 @@
 int inode_number; // quantidade de inodes
 int inodes_in_a_block;// quantidade de inodes em um bloco
 
+// estruturas em disco //
+
 struct dataTime
 {
 	short int dia, mes, ano;
@@ -31,11 +33,6 @@ typedef struct superblock
 	unsigned int data_table_begin; // numero de inicio da tabela de dados
 } superblock;
 
-typedef struct bloco_indireto
-{
-	unsigned int *blocos;
-} bloco_indireto;
-
 typedef struct inode
 {
 	short int tipo; // 0 - invalido, 1 - arquivo, 2 - diretorio
@@ -43,16 +40,27 @@ typedef struct inode
 	struct dataTime acesso; 
 	int tamanho; // tamanho, em bytes, se for um arquivo. tamanho, em quantidade de entradas, se for um diretório.
 	
-	int blocos[10]; // armazena os numeros para os blocos de dados diretos (-1 é invalido) -- 10 * 4KB = 40KB
-	int ind_bloco; // indica o bloco de dados onde está a estrutura bloco_indireto (-1 é invalido) -- 1024 * 4KB = 4MB
-	int dup_ind_bloco; // indica um bloco que está preenchido com indicadores para blocos indiretos -- 1024 * 1024 * 4KB = 4GB
+	int bloco_inicial; // bloco de dados inicial
+	int bloco_final; // bloco de dados final
 } inode;
 
 typedef struct dir_entry
 {
-	int numero_inode;
-	char nome[11];
+	int numero_inode; // -1 faz com que seja inválido
+	char nome[MAXIMUM_NAME_LENGTH + 1];
 } dir_entry;
+
+// estruturas em memória apenas
+
+typedef struct file_descriptor
+{
+	inode inode_data;
+	char nome[MAXIMUM_NAME_LENGTH + 1];
+	int offset;// em bytes
+}file_descriptor;
+
+typedef 
+
 
 long int abrir_dispositivo(const char *pathname, int *fd);
 int ler_bloco(int fd, unsigned int num_bloco, void *bloco);
@@ -60,7 +68,7 @@ int escrever_bloco(int fd, unsigned int num_bloco, void *bloco);
 int read_inode(int fd, unsigned int file_table_begin, unsigned int num_inode, void *inode);
 int write_inode(int fd,  unsigned int file_table_begin, unsigned int num_inode, void *inode);
 int obter_inode_livre(int fd, superblock sb);
-int localizar_bit(unsigned char valor);
+int localizar_bit(unsigned char valor, char bit, int sentido);
 int alterar_bitmap(int fd, int number, superblock sb, int tipo);
 unsigned char inverter_bit(unsigned char valor, int pos);
 

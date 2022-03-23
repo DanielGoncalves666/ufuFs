@@ -47,6 +47,7 @@ int main(int argc, char *argv[])
 	offset += sizeof(unsigned int);
 	memcpy(&sb.data_table_begin,empty_block + offset,sizeof(unsigned int));
 	
+	
 	printf("%d\n",sb.magic_number);
 	printf("%u\n",sb.block_number);
 	printf("%u\n",sb.block_size);
@@ -56,8 +57,21 @@ int main(int argc, char *argv[])
 	printf("%u\n",sb.file_table_begin);
 	printf("%u\n",sb.data_table_begin);
 		
-
-
+		
+	void *in = calloc(1,BLOCK_SIZE);	
+	dir_entry itself;	
+		
+	ler_bloco(div_fd,sb.data_table_begin,in);
+		
+	offset = 0;
+	memcpy(&itself,in + offset,sizeof(dir_entry));
+	
+	
+	printf("\n%d\n",itself.numero_inode);
+	printf("%s\n",itself.nome);
+	
+	close(div_fd);
+	
 	return 0;
 
 }

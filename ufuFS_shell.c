@@ -5,6 +5,18 @@
 Módulo do mini-shell
 */
 
+int main()
+{
+	
+
+
+	return 0;
+}
+
+
+
+
+
 /*
 	Funcionalidades necessárias:
 		criar arquivos e diretórios
