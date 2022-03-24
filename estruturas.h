@@ -38,7 +38,7 @@ typedef struct inode
 	short int tipo; // 0 - invalido, 1 - arquivo, 2 - diretorio
 	struct dataTime criacao;
 	struct dataTime acesso; 
-	int tamanho; // tamanho, em bytes, se for um arquivo. tamanho, em quantidade de entradas, se for um diretório.
+	unsigned int tamanho; // tamanho, em bytes, se for um arquivo. tamanho, em quantidade de entradas, se for um diretório.
 	
 	int bloco_inicial; // bloco de dados inicial
 	int bloco_final; // bloco de dados final
@@ -56,7 +56,8 @@ typedef struct file_descriptor
 {
 	inode inode_data;
 	char nome[MAXIMUM_NAME_LENGTH + 1];
-	int offset;// em bytes
+	unsigned int offset;// em bytes
+	unsigned int tamanho;
 }file_descriptor;
 
 typedef 

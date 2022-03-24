@@ -114,6 +114,7 @@ int ufufs_open(char *pathname)
 		fd_table[i].inode_data = atual;
 		strcpy(fd_table.nome,entrada.nome);
 		fd_table.offset = 0;
+		fd_table.tamanho = atual.tamanho;
 		
 		return i;
 	}
@@ -129,20 +130,77 @@ Entrada: inteiro indicando o file descriptor do arquivo, ponteiro para o posiç�
 Descrição: 
 Saída: -1 em falha, quantidade de bytes lidos em sucesso
 */
-int ufufs_read(int fd, void *buffer, int qtd)
+int ufufs_read(int fd, void *destino, int qtd)
 {
-	// teremos que usar a estrutura em memória do inode, essa estrutura vai ter um valor chamado de CURSOR que indica o proximo byte a ser lido
-	// em falta dessa estrutura, referencia a esse valor será dada por CURSOR
+	if(fd < 0)
+		return -1;
+		
+	void *buffer = calloc(1,BLOCK_SIZE);	
+		
+	int inicio = sb.data_table_begin + fd_table[fd].inode_data.bloco_inicial;
+	int fim = sb.data_table_begin + fd_table[fd].inode_data.bloco_final;
+	int bloco_offset = fd_table[fd].offset / BLOCK_SIZE; // bloco onde o próximo byte a ser lido está localizado
+	int inside_offset = fd_table[fd].offset % BLOCK_SIZE; // próximo byte dentro do bloco a ser lido
+	int restante = BLOCK_SIZE - inside_offset + 1;
+	int lidos = 0, ler, ultimo_byte;
 	
-	int b = CURSOR / BLOCK_SIZE; //determina o bloco de dados onde está o próximo byte a ser lido
-	int pode_lido = BLOCK_SIZE - (CURSOR % BLOCK_SIZE);//quantidade de bytes que podem ser lidos do primeiro bloco 
-
-	//  void *memcpy(void *dest, const void *src, size_t n);
-
-	/*
-		recebe o file descriptor obtido por meio do open
-		realizamos então uma busca pelos ponteiros de dados pelo bloco que contém os bytes requeridos
-	*/
+	for(int i = inicio + bloco_offset; i<= fim; i++)
+	{
+		if(ler_bloco(fd,i,buffer) == 0)
+			return -1;
+			
+		if(i == fim)
+		{
+			ultimo_byte = fd_table[fd].tamanho % BLOCK_SIZE;
+			
+			if( qtd <= ultimo_byte)
+			{
+				memcpy(destino + lidos,buffer, qtd);
+				lidos += qtd;
+			}
+			else
+			{
+				memcpy(destino + lidos,buffer, ultimo_byte)
+				lidos += ultimo_byte;
+			}
+			break;
+		}		
+			
+		if(restante > qtd)
+		{
+			// apesar do bloco n ter sido todo lido, será lido menos doq o restante
+			memcpy(destino,buffer + inside_offset, qtd);
+			fd_table[fd].offset += qtd;
+			break;		
+		}
+		else if(restante < 0)
+		{
+			// blocos desde o inicio
+			if(qtd < BLOCK_SIZE)
+			{
+				memcpy(destino + lidos,buffer, qtd);
+				lidos += qtd;
+				break;
+			}
+			else
+			{
+				memcpy(destino + lidos,buffer, BLOCK_SIZE);
+				lidos += BLOCK_SIZE;
+				qtd -= BLOCK_SIZE;	
+			}
+		}
+		else
+		{
+			// le o resto do bloco
+			memcpy(destino,buffer + inside_offset, restante);
+			qtd -= restante;
+			lidos += restante;	
+			restante = -1;	
+		}
+	}
+	
+	free(buffer);
+	return lidos;
 }
 
 /*
