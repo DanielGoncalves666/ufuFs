@@ -165,6 +165,7 @@ inode criar_inode_raiz()
 	agora = localtime(&raw);
 	
 	raiz.tipo = DIRETORIO;
+	raiz.inode_num = 0;
 	raiz.criacao.dia = agora->tm_mday;
 	raiz.criacao.mes = agora->tm_mon + 1; 
 	raiz.criacao.ano = agora->tm_year + 1900;

@@ -242,7 +242,7 @@ Saída: 0, em fracasso, 1, em sucesso
 */
 int alterar_bitmap(int fd, int number, superblock sb, int tipo)
 {
-	unsigned char *bitmap = (char *) malloc(sizeof(unsigned char) * BLOCK_SIZE);
+	unsigned char *bitmap = (unsigned char *) calloc(1,BLOCKSIZE);
 
 	if(fd < 0)
 		return 0; // file descriptor inválido
@@ -294,16 +294,87 @@ unsigned char inverter_bit(unsigned char valor, int pos)
 	return aux;	
 }
 
+int alterar_faixa_bitmap(int fd, int inicio, int fim, superblock sb)
+{
+	// verificação dos argumentos
+		// return -1 em falha;
+
+	unsigned char *bitmap = (unsigned char *) calloc(1,BLOCKSIZE);
+
+	int b = sb.data_bitmap_begin;
+	
+	b = b + inicio / (BLOCK_SIZE * 8); // número do bloco onde o inicia fica
+	int resto_inicial = 8 - ((inicio + 1) % 8); // quantidade de bits em um byte incompleto
+	int resto_final = (fim + 1) % 8; // quantidade de bits final em um byte imcompleto
+	int qtd = fim - inicio + 1;
+	int inside_offset;
+
+	int i,h,j;
+
+	for(i = b; i < sb.file_table_begin; i++)
+	{
+		ler_bloco(fd,i,bitmap);
+		
+		inside_offset = (inicio % (BLOCK_SIZE * 8)) / 8; // byte dentro do bloco;
+		if(resto_inicial != 0)
+		{
+			for(h = inicio, j=0; j < resto_inicial; j++, h++)
+			{
+				alterar_bitmap(fd, h, superblock sb, 1); // altera posição por posição
+			}
+			qtd -= resto_inicial;
+			inicio += resto_inicial; // como alteramos os primeiros bits, movemos o apontador de inicio
+			resto_inicial = 0;
+			inside_offset++;
+		}
+		
+		while(qtd > 8 && inside_offset < BLOCK_SIZE)
+		{
+			if(bitmap[inside_offset] == 0)// inverte o byte
+				bitmap[inside_offset] = 1;
+			else
+				bitmap[inside_offset] = 0;
+		
+			inicio += 8;
+			inside_offset++;
+			qtd -= 8;
+		}
+		
+		if(qtd < 8 && inside_offset < BLOCK_SIZE)
+		{
+			for(h = inicio, j=0; j < resto_final; j++, h++)
+			{
+				alterar_bitmap(fd, h, superblock sb, 1); // altera posição por posição
+			}
+			
+			resto_final = 0;
+			qtd -= resto_final;
+			inside_offset++;
+		}
+		
+		if(qtd == 0)
+			break;
+
+	}
+
+	
+	return 0;
+
+}
+
 /*
 get_bitmap_pos_status
 ---------------
-Entrada: inteiro, indicando a posição (em bits) a ser alterada, estrutura de superbloco para se obter informações de início do bitmap; inteiro, 1 para DATA, 2 para INODE
+Entrada: inteiro contendo o file descriptor do device file
+		 inteiro, indicando a posição a ser consultada 
+	     estrutura de superbloco para se obter informações de início do bitmap
+	     inteiro, 1 para DATA, 2 para INODE
 Descrição: retorna o bit da posição indicada
 Saída: -1 em falha, um inteiro não negativo em sucesso
 */
-int get_bitmap_pos_status(int number, superblock sb, int tipo)
+int get_bitmap_pos_status(int fd, int number, superblock sb, int tipo)
 {
-	bitmap bm;
+	unsigned char *buffer = (unsigned char *) calloc(1,BLOCK_SIZE);	
 
 	// verificar se sb é válido
 	int b = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
@@ -312,16 +383,17 @@ int get_bitmap_pos_status(int number, superblock sb, int tipo)
 	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
 	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
 	
-	// VERIFICA SE OS VALORES OBTIDOS FAZEM SENTIDO
+	if(b >= (tipo == 1? sb.file_table_begin : data_bitmap_begin))
+		return -1; 
 	
-	if( ler_bloco(b,&(bm.mat)) == 0)
+	if( ler_bloco(fd,b,buffer) == 0)
 		return 0;
 
 	int i = 7,h;
 	int resto, aux;
 	char vetor[8] = {'0','0','0','0','0','0','0','0'};
 	
-	aux = bm.mat[offset];
+	aux = buffer[offset];
 	while(aux != 0)
 	{
 		resto = aux % 2;

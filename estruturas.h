@@ -36,6 +36,7 @@ typedef struct superblock
 typedef struct inode
 {
 	short int tipo; // 0 - invalido, 1 - arquivo, 2 - diretorio
+	int inode_num;
 	struct dataTime criacao;
 	struct dataTime acesso; 
 	unsigned int tamanho; // tamanho, em bytes, se for um arquivo. tamanho, em quantidade de entradas, se for um diretório.
@@ -58,6 +59,7 @@ typedef struct file_descriptor
 	char nome[MAXIMUM_NAME_LENGTH + 1];
 	unsigned int offset;// em bytes
 	unsigned int tamanho;
+	short int escrita;
 }file_descriptor;
 
 typedef 
