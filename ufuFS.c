@@ -8,11 +8,14 @@ Este módulo contém funções relacionadas com a operação do sistema de arqui
 
 #include<math.h>
 
-#define MAXIMUM_OPEN_FILES
+#define MAXIMUM_OPEN_FILES 50
+#define SEEK_SET 1
+#define SEEK_CUR 2
+#define SEEK_END 3
 
 extern superblock sb;
 extern fd = -1;
-extern file_descriptor fd_table[MAXIMUM_OPEN_FILES];
+extern file_descriptor *fd_table[MAXIMUM_OPEN_FILES];
 
 int ufufs_mount(char *dispositivo)
 {
@@ -42,7 +45,7 @@ int ufufs_mount(char *dispositivo)
 	
 	for(int i = 0; i < MAXIMUM_OPEN_FILES; i++)
 	{
-		fd_table[i] = -1;
+		fd_table[i] = NULL;
 	}
 	
 	free(primeiro_bloco);
@@ -108,13 +111,15 @@ int ufufs_open(char *pathname)
 	free(buffer);
 	for(i = 0; i < MAXIMUM_OPEN_FILES; i++)
 	{
-		if(fd_table[i] == -1)
+		if(fd_table[i] == NULL)
 			continue;		
+			
+		fd_table[i] = (file_descriptor *) calloc(1,sizeof(file_descriptor));	
 		
-		fd_table[i].inode_data = atual;
-		strcpy(fd_table.nome,entrada.nome);
-		fd_table.offset = 0;
-		fd_table.tamanho = atual.tamanho;
+		fd_table[i]->inode_data = atual;
+		strcpy(fd_table->nome,entrada.nome);
+		fd_table->offset = 0;
+		fd_table->tamanho = atual.tamanho;
 		
 		return i;
 	}
@@ -132,15 +137,15 @@ Saída: -1 em falha, quantidade de bytes lidos em sucesso
 */
 int ufufs_read(int fd, void *destino, int qtd)
 {
-	if(fd < 0)
+	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
 		return -1;
 		
 	void *buffer = calloc(1,BLOCK_SIZE);	
 		
-	int inicio = sb.data_table_begin + fd_table[fd].inode_data.bloco_inicial;
-	int fim = sb.data_table_begin + fd_table[fd].inode_data.bloco_final;
-	int bloco_offset = fd_table[fd].offset / BLOCK_SIZE; // bloco onde o próximo byte a ser lido está localizado
-	int inside_offset = fd_table[fd].offset % BLOCK_SIZE; // próximo byte dentro do bloco a ser lido
+	int inicio = sb.data_table_begin + fd_table[fd]->inode_data.bloco_inicial;
+	int fim = sb.data_table_begin + fd_table[fd]->inode_data.bloco_final;
+	int bloco_offset = fd_table[fd]->offset / BLOCK_SIZE; // bloco onde o próximo byte a ser lido está localizado
+	int inside_offset = fd_table[fd]->offset % BLOCK_SIZE; // próximo byte dentro do bloco a ser lido
 	int restante = BLOCK_SIZE - inside_offset + 1;
 	int lidos = 0, ler, ultimo_byte;
 	
@@ -170,7 +175,7 @@ int ufufs_read(int fd, void *destino, int qtd)
 		{
 			// apesar do bloco n ter sido todo lido, será lido menos doq o restante
 			memcpy(destino,buffer + inside_offset, qtd);
-			fd_table[fd].offset += qtd;
+			lidos = qtd;
 			break;		
 		}
 		else if(restante < 0)
@@ -199,6 +204,7 @@ int ufufs_read(int fd, void *destino, int qtd)
 		}
 	}
 	
+	fd_table[fd]->offset += lidos;
 	free(buffer);
 	return lidos;
 }
@@ -223,21 +229,52 @@ int ufufs_write(int fd, void *buffer, int qtd)
 	*/
 }
 
-int ufufs_seek(int fd, int offset, int flags)
+
+/*
+	   SEEK_SET 1
+              The file offset is set to offset bytes.
+
+       SEEK_CUR 2
+              The file offset is set to its current location plus offset bytes.
+
+       SEEK_END 3
+              The file offset is set to the size of the file plus offset bytes.
+*/
+int ufufs_seek(int fd, unsigned int offset, int flags)
 {
-	/*
-		recebe o file descriptr obtido por meio do open
-		altera o "cursor" do arquivo. Esse cursor é armazenado no file descriptor do arquivo em memória.
-		dada uma quantidade de bytes, procuramos pelo bloco específico.
-	*/
+	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
+		return -1;
+
+	if(flags < 1 || flags > 3)
+		return -1;
+		
+	if(flags == SEEK_SET)
+	{
+		fd_table[fd]->offset = offset - 1;
+	}
+	
+	if(flags == SEEK_CUR)
+	{
+		fd_table[fd]->offset += offset;
+	}
+	
+	if(flags == SEEK_END)
+	{
+		fd_table[fd]->offset = fd_table[fd]->tamanho + offset - 1;
+	}
+	
+	return 0;
 }
 
 int ufufs_close(int fd)
 {
-	/*
-		recebe o file descriptr obtido por meio do open
-		realiza o salvamento de qualquer dados não salvos em disco e então desaloca as estruturas criadas por meio do open
-	*/
+	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
+		return -1;
+		
+	free(fd_table[fd]);
+	fd_table[fd] = NULL;
+	
+	return 0;
 }
 
 #endif
