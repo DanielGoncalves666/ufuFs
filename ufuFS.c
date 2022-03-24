@@ -10,6 +10,8 @@ Este módulo contém funções relacionadas com a operação do sistema de arqui
 #include<stdlib.h>
 #include<string.h>
 #include"estruturas.h"
+#include"bitmap.h"
+#include"bloco.h"
 #include<math.h>
 
 #define MAXIMUM_OPEN_FILES 50

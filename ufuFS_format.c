@@ -11,8 +11,10 @@ Módulo de formatação
 #include<stdlib.h>
 #include<math.h>
 #include<time.h>
-#include"estruturas.h"
 #include <unistd.h>
+#include"estruturas.h"
+#include"bitmap.h"
+#include"bloco.h"
 
 #define INODE_RATIO 0.05
 

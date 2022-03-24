@@ -62,16 +62,4 @@ typedef struct file_descriptor
 	short int escrita;
 }file_descriptor;
 
-long int abrir_dispositivo(const char *pathname, int *fd);
-int ler_bloco(int fd, unsigned int num_bloco, void *bloco);
-int escrever_bloco(int fd, unsigned int num_bloco, void *bloco);
-int read_inode(int fd, unsigned int file_table_begin, unsigned int num_inode, void *inode);
-int write_inode(int fd,  unsigned int file_table_begin, unsigned int num_inode, void *inode);
-int obter_inode_livre(int fd, superblock sb);
-int localizar_bit(unsigned char valor, char bit, int sentido);
-int alterar_bitmap(int fd, int number, superblock sb, int tipo);
-unsigned char inverter_bit(unsigned char valor, int pos);
-int alterar_faixa_bitmap(int fd, int inicio, int fim, superblock sb);
-int get_bitmap_pos_status(int fd, int number, superblock sb, int tipo);
-int get_block_sequence(int fd, int comeco, superblock sb, int qtd);
 #endif
