@@ -242,7 +242,7 @@ Saída: 0, em fracasso, 1, em sucesso
 */
 int alterar_bitmap(int fd, int number, superblock sb, int tipo)
 {
-	unsigned char *bitmap = (unsigned char *) calloc(1,BLOCKSIZE);
+	unsigned char *bitmap = (unsigned char *) calloc(1,BLOCK_SIZE);
 
 	if(fd < 0)
 		return 0; // file descriptor inválido
@@ -299,7 +299,7 @@ int alterar_faixa_bitmap(int fd, int inicio, int fim, superblock sb)
 	// verificação dos argumentos
 		// return -1 em falha;
 
-	unsigned char *bitmap = (unsigned char *) calloc(1,BLOCKSIZE);
+	unsigned char *bitmap = (unsigned char *) calloc(1,BLOCK_SIZE);
 
 	int b = sb.data_bitmap_begin;
 	
@@ -320,7 +320,7 @@ int alterar_faixa_bitmap(int fd, int inicio, int fim, superblock sb)
 		{
 			for(h = inicio, j=0; j < resto_inicial; j++, h++)
 			{
-				alterar_bitmap(fd, h, superblock sb, 1); // altera posição por posição
+				alterar_bitmap(fd, h, sb, 1); // altera posição por posição
 			}
 			qtd -= resto_inicial;
 			inicio += resto_inicial; // como alteramos os primeiros bits, movemos o apontador de inicio
@@ -344,7 +344,7 @@ int alterar_faixa_bitmap(int fd, int inicio, int fim, superblock sb)
 		{
 			for(h = inicio, j=0; j < resto_final; j++, h++)
 			{
-				alterar_bitmap(fd, h, superblock sb, 1); // altera posição por posição
+				alterar_bitmap(fd, h,sb, 1); // altera posição por posição
 			}
 			
 			resto_final = 0;
@@ -383,7 +383,7 @@ int get_bitmap_pos_status(int fd, int number, superblock sb, int tipo)
 	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
 	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
 	
-	if(b >= (tipo == 1? sb.file_table_begin : data_bitmap_begin))
+	if(b >= (tipo == 1? sb.file_table_begin : sb.data_bitmap_begin))
 		return -1; 
 	
 	if( ler_bloco(fd,b,buffer) == 0)
@@ -403,7 +403,7 @@ int get_bitmap_pos_status(int fd, int number, superblock sb, int tipo)
 		i--;
 	}
 
-	return atoi(vetor[final_offset]);
+	return vetor[final_offset] == '1'? 1 : 0;
 }
 
 /*
@@ -466,7 +466,7 @@ int get_block_sequence(int fd, int comeco, superblock sb, int qtd)
 					antes = 8 - localizar_bit(*(data_block + h),'1',1); // quantidade de bits zerados na direita do byte
 				}
 				
-				if(get_block_sequence(fd, (i - comeco) + 1, qtd - (8 *(min_completos - k) + antes)) == (i + 1)*(BLOCK_SIZE * 8))// caso retorne a primeira posição do proximo bloco então temos uma área contigua 
+				if(get_block_sequence(fd, (i - comeco) + 1, sb, qtd - (8 *(min_completos - k) + antes)) == (i + 1)*(BLOCK_SIZE * 8))// caso retorne a primeira posição do proximo bloco então temos uma área contigua 
 					return j * (BLOCK_SIZE * 8) + (h * 8) - antes;
 						
 			}

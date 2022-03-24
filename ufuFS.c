@@ -6,19 +6,23 @@ Este módulo contém funções relacionadas com a operação do sistema de arqui
 
 */
 
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include"estruturas.h"
 #include<math.h>
 
 #define MAXIMUM_OPEN_FILES 50
-#define SEEK_SET 1
-#define SEEK_CUR 2
-#define SEEK_END 3
+#define SEEK_SET_UFU 1
+#define SEEK_CUR_UFU 2
+#define SEEK_END_UFU 3
 
 #define APPEND 1 // append no final do arquivo
 #define OVERWRITTEN 2 // reescreve desde o começo
 #define APPEND_AT 3 // append a partir do offset
 
 extern superblock sb;
-extern div_fd = -1;
+int div_fd = -1;
 extern file_descriptor *fd_table[MAXIMUM_OPEN_FILES];
 
 int ufufs_mount(char *dispositivo)
@@ -35,7 +39,7 @@ int ufufs_mount(char *dispositivo)
 	
 	if(ler_bloco(div_fd,0,primeiro_bloco) == 0)
 	{
-		return -1
+		return -1;
 	}
 	
 	memcpy(&magic_number,primeiro_bloco,sizeof(int));
@@ -59,7 +63,7 @@ int ufufs_mount(char *dispositivo)
 
 int ufufs_open(char *pathname, int flags)
 {
-	char token[MAXIMUM_NAME_LENGTH + 1];
+	char *token;
 	int i,h,qtd,offset;
 	inode atual;
 	dir_entry entrada;
@@ -121,10 +125,10 @@ int ufufs_open(char *pathname, int flags)
 		fd_table[i] = (file_descriptor *) calloc(1,sizeof(file_descriptor));	
 		
 		fd_table[i]->inode_data = atual;
-		strcpy(fd_table->nome,entrada.nome);
-		fd_table->offset = 0;
-		fd_table->tamanho = atual.tamanho;
-		fd_table->escrita = flags;
+		strcpy(fd_table[i]->nome,entrada.nome);
+		fd_table[i]->offset = 0;
+		fd_table[i]->tamanho = atual.tamanho;
+		fd_table[i]->escrita = flags;
 		
 		return i;
 	}
@@ -161,7 +165,7 @@ int ufufs_read(int fd, void *destino, int qtd)
 			
 		if(i == fim)
 		{
-			ultimo_byte = fd_table[fd].tamanho % BLOCK_SIZE;
+			ultimo_byte = fd_table[fd]->tamanho % BLOCK_SIZE;
 			
 			if( qtd <= ultimo_byte)
 			{
@@ -170,7 +174,7 @@ int ufufs_read(int fd, void *destino, int qtd)
 			}
 			else
 			{
-				memcpy(destino + lidos,buffer, ultimo_byte)
+				memcpy(destino + lidos,buffer, ultimo_byte);
 				lidos += ultimo_byte;
 			}
 			break;
@@ -235,7 +239,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 	int resto_pode_ser_escrito; // quantidade de bytes que podem ser escritos no último bloco de dados do arquivo
 	
 	int i, h, j, ponteiro,aux, retorno;
-	int ultimo, local;
+	int ultimo, primeiro, local;
 	void *to_write = calloc(1,BLOCK_SIZE);	
 	
 	if(escrita == OVERWRITTEN)
@@ -266,7 +270,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 				{
 					memcpy(to_write, buffer + ponteiro, BLOCK_SIZE);
 					ponteiro += BLOCK_SIZE;
-					qtd -= BLOCK_SIZE:
+					qtd -= BLOCK_SIZE;
 				}
 						
 				escrever_bloco(div_fd,i, to_write);
@@ -278,15 +282,16 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 		else // se contiver mais bytes
 		{
 			ultimo = this.bloco_final;
+			primeiro = this.bloco_inicial;
 			int blocos_extras_necessarios = (qtd - tamanho) / BLOCK_SIZE; // blocos completos extras necessários
 			resto_ser_escrito = (qtd - tamanho) % BLOCK_SIZE; // bytes a serem escritos que n formam um bloco
-			resto_pode_ser_escrito =  BLOCK_SIZE - (tamanho % BLOCKSIZE); // bytes que podem ser escritos no ultimo bloco
+			resto_pode_ser_escrito =  BLOCK_SIZE - (tamanho % BLOCK_SIZE); // bytes que podem ser escritos no ultimo bloco
 			resto_ser_escrito -= resto_pode_ser_escrito;
 			
 			if(resto_ser_escrito > 0)
 				blocos_extras_necessarios++;// vai precisar de um bloco a mais, que n vai ser escrito completamente
 			
-			for(i = ultimo + 1; i < blocos_extras_necessarios i++)
+			for(i = ultimo + 1; i < blocos_extras_necessarios; i++)
 			{
 				retorno = get_bitmap_pos_status(fd,i,sb,1);
 			
@@ -327,7 +332,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 						{
 							memcpy(to_write, buffer + ponteiro, BLOCK_SIZE);
 							ponteiro += BLOCK_SIZE;
-							qtd -= BLOCK_SIZE:
+							qtd -= BLOCK_SIZE;
 						}
 								
 						escrever_bloco(div_fd,i, to_write);
@@ -362,7 +367,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 					{
 						memcpy(to_write, buffer + ponteiro, BLOCK_SIZE);
 						ponteiro += BLOCK_SIZE;
-						qtd -= BLOCK_SIZE:
+						qtd -= BLOCK_SIZE;
 					}
 							
 					escrever_bloco(div_fd,i, to_write);
@@ -404,17 +409,17 @@ int ufufs_seek(int fd, unsigned int offset, int flags)
 	if(flags < 1 || flags > 3)
 		return -1;
 		
-	if(flags == SEEK_SET)
+	if(flags == SEEK_SET_UFU)
 	{
 		fd_table[fd]->offset = offset - 1;
 	}
 	
-	if(flags == SEEK_CUR)
+	if(flags == SEEK_CUR_UFU)
 	{
 		fd_table[fd]->offset += offset;
 	}
 	
-	if(flags == SEEK_END)
+	if(flags == SEEK_END_UFU)
 	{
 		fd_table[fd]->offset = fd_table[fd]->tamanho + offset - 1;
 	}
