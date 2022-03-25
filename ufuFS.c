@@ -11,9 +11,6 @@ Este módulo contém funções relacionadas com a operação do sistema de arqui
 #include<unistd.h>
 #include<time.h>
 #include"ufuFS.h"
-#include"estruturas.h"
-#include"bitmap.h"
-#include"bloco.h"
 
 
 superblock sb;
@@ -193,7 +190,7 @@ int ufufs_read(int fd, void *destino, int qtd)
 	int bloco_offset = fd_table[fd]->offset / BLOCK_SIZE; // bloco onde o próximo byte a ser lido está localizado
 	int inside_offset = fd_table[fd]->offset % BLOCK_SIZE; // próximo byte dentro do bloco a ser lido
 	int restante = BLOCK_SIZE - inside_offset + 1;
-	int lidos = 0, ler, ultimo_byte;
+	int lidos = 0, ultimo_byte;
 	
 	for(int i = inicio + bloco_offset; i<= fim; i++)
 	{
@@ -281,8 +278,8 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 	int resto_ser_escrito = qtd % BLOCK_SIZE; // número de bytes a serem escritos que n formam um bloco
 	int resto_pode_ser_escrito = BLOCK_SIZE - (offset % BLOCK_SIZE); // quantidade de bytes que podem ser escritos no último bloco de dados do arquivo
 	
-	int i, h, j, ponteiro,aux, retorno;
-	int ultimo, primeiro, local, novo_inicio = -1;
+	int i, ponteiro,aux, retorno;
+	int ultimo, primeiro, novo_inicio = -1;
 	int inside_bloco,inside_offset, blocos_extras_necessarios;
 	
 	void *to_write = calloc(1,BLOCK_SIZE);	
@@ -309,6 +306,9 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 	}
 	else if(offset == 0 && qtd > tamanho + resto_pode_ser_escrito)
 	{
+		ultimo = this.bloco_final;
+		primeiro = this.bloco_inicial;
+		
 		// precisa de alocação
 		blocos_extras_necessarios = (qtd - tamanho) / BLOCK_SIZE; // blocos completos extras necessários
 		resto_ser_escrito = (qtd - tamanho) % BLOCK_SIZE; // bytes a serem escritos que n formam um bloco
@@ -402,6 +402,9 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 	else
 	{
 		// precisa de alocação
+		ultimo = this.bloco_final;
+		primeiro = this.bloco_inicial;
+
 
 		blocos_extras_necessarios = (qtd - tamanho) / BLOCK_SIZE; // blocos completos extras necessários
 		resto_ser_escrito = (qtd - tamanho) % BLOCK_SIZE; // bytes a serem escritos que n formam um bloco

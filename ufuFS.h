@@ -1,6 +1,10 @@
 #ifndef UFUFS_H
 #define UFUFS_H
 
+#include"estruturas.h"
+#include"bloco.h"
+#include"bitmap.h"
+
 #define MAXIMUM_OPEN_FILES 50
 #define SEEK_SET_UFU 1
 #define SEEK_CUR_UFU 2

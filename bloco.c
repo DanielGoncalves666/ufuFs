@@ -7,11 +7,11 @@ As funções com parâmetros tipo void necessitam deles pois os dados não tem t
 
 #include<stdio.h>
 #include<stdlib.h>
-#include"estruturas.h"
-#include"bloco.h"
 #include<sys/types.h>
 #include<unistd.h>
 #include<fcntl.h>
+#include"ufuFS.h"
+
 
 int block_number; // quantidade de blocos no dispositivo
 int inode_number; // quantidade de inodes no dispositivo

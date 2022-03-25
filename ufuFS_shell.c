@@ -4,10 +4,7 @@
 #include<sys/types.h>
 #include<fcntl.h>
 #include<unistd.h>
-#include"estruturas.h"
 #include"ufuFS.h"
-#include"bloco.h"
-#include"bitmap.h"
 
 /*
 os camandos seguem um padrão de separação entre argumentos com espaço. Qualquer espaço é identificado como separador, logo esse shell não suporta nomes com espaço

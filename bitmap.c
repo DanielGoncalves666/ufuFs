@@ -1,9 +1,7 @@
 #include<stdlib.h>
 #include<math.h>
 #include<string.h>
-#include"estruturas.h"
-#include"bitmap.h"
-#include"bloco.h"
+#include"ufuFS.h"
 
 
 /*
@@ -16,7 +14,7 @@ Saída: -1, em falha, inteiro não negativo indicando o inode livre encontrado
 */
 int obter_inode_livre(int fd, superblock sb)
 {
-	unsigned char *bitmap = (char *) malloc(sizeof(unsigned char) * BLOCK_SIZE);
+	unsigned char *bitmap = (unsigned char *) malloc(sizeof(unsigned char) * BLOCK_SIZE);
 	int num_inode = 0;
 
 	if(fd < 0)
@@ -250,7 +248,7 @@ int get_bitmap_pos_status(int fd, int number, superblock sb, int tipo)
 	if( ler_bloco(fd,b,buffer) == 0)
 		return 0;
 
-	int i = 7,h;
+	int i = 7;
 	int resto, aux;
 	char vetor[8] = {'0','0','0','0','0','0','0','0'};
 	
