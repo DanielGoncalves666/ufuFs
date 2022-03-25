@@ -14,6 +14,8 @@ As funções com parâmetros tipo void necessitam deles pois os dados não tem t
 #include<fcntl.h>
 
 int block_number; // quantidade de blocos no dispositivo
+int inode_number; // quantidade de inodes no dispositivo
+int inodes_in_a_block; // quantidade de inodes em um bloco
 
 /*
 abrir_dispositivo
@@ -29,7 +31,6 @@ long int abrir_dispositivo(const char *pathname, int *fd)
 	
 	if(*fd < 0)
 	{
-		fprintf(stderr,"\nFalha no acesso ao disco %s.\n",pathname);
 		return -1;
 	}
 	
@@ -102,7 +103,7 @@ Entrada: inteiro contendo o file descriptor do device file
 Descrição: realiza leitura de um inode
 Saída: 0, em falha, 1, em sucesso
 */
-int read_inode(int fd, unsigned int file_table_begin, unsigned int num_inode, void *inode)
+int read_inode(int fd, unsigned int file_table_begin, unsigned int num_inode, void *buff)
 {
 	if(fd < 0)
 		return 0; // file descriptor inválido
@@ -118,7 +119,7 @@ int read_inode(int fd, unsigned int file_table_begin, unsigned int num_inode, vo
 	if( lseek(fd, (bloco * BLOCK_SIZE) + offset * sizeof(inode), SEEK_SET) < 0)
 		return 0;	
 	
-	read(fd,inode, sizeof(inode));
+	read(fd,buff, sizeof(inode));
 	return 1;
 }
 
@@ -132,7 +133,7 @@ Entrada: inteiro contendo o file descriptor do device file
 Descrição: realiza leitura de um inode
 Saída: 0, em falha, 1, em sucesso
 */
-int write_inode(int fd,  unsigned int file_table_begin, unsigned int num_inode, void *inode)
+int write_inode(int fd,  unsigned int file_table_begin, unsigned int num_inode, void *buff)
 {
 	if(fd < 0)
 		return 0; // file descriptor inválido
@@ -146,7 +147,8 @@ int write_inode(int fd,  unsigned int file_table_begin, unsigned int num_inode, 
 	if( lseek(fd, (bloco * BLOCK_SIZE) + offset * sizeof(inode), SEEK_SET) < 0)
 		return 0;	
 	
-	write(fd,inode, sizeof(inode));
+	write(fd,buff, sizeof(inode));
+	fsync(fd);
 	return 1;
 }
 

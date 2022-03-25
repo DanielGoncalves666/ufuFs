@@ -1,6 +1,3 @@
-#ifndef UFUFS_H
-#define UFUFS_H
-
 /*
 Este módulo contém funções relacionadas com a operação do sistema de arquivos em si. Como abertura do device driver e manipulação das estruturas de metadados.
 
@@ -9,28 +6,29 @@ Este módulo contém funções relacionadas com a operação do sistema de arqui
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<math.h>
+#include"ufuFS.h"
 #include"estruturas.h"
 #include"bitmap.h"
 #include"bloco.h"
-#include<math.h>
 
-#define MAXIMUM_OPEN_FILES 50
-#define SEEK_SET_UFU 1
-#define SEEK_CUR_UFU 2
-#define SEEK_END_UFU 3
 
-#define APPEND 1 // append no final do arquivo
-#define OVERWRITTEN 2 // reescreve desde o começo
-#define APPEND_AT 3 // append a partir do offset
-
-extern superblock sb;
+superblock sb;
 int div_fd = -1;
-extern file_descriptor *fd_table[MAXIMUM_OPEN_FILES];
+file_descriptor *fd_table[MAXIMUM_OPEN_FILES];
+extern int inode_number;
+extern int inodes_in_a_block;
 
+/*
+ufufs_mount
+------------
+Entrada: string contendo o nome do dispositivo
+Descrição:
+Saída: -1, em falha, 0 em sucesso
+*/
 int ufufs_mount(char *dispositivo)
 {
 	int num_blocks;
-	int magic_number;
 	void *primeiro_bloco = calloc(1,BLOCK_SIZE);
 	
 	num_blocks = abrir_dispositivo(dispositivo,&div_fd);
@@ -38,20 +36,21 @@ int ufufs_mount(char *dispositivo)
 	{
 		return -1;
 	}
-	
+
 	if(ler_bloco(div_fd,0,primeiro_bloco) == 0)
 	{
 		return -1;
 	}
-	
-	memcpy(&magic_number,primeiro_bloco,sizeof(int));
-	if(magic_number != UFUFS_MAGIC_NUMBER)
+
+	memcpy(&sb,primeiro_bloco,sizeof(superblock));
+
+	if(sb.magic_number != UFUFS_MAGIC_NUMBER)
 	{
-		fprintf(stderr,"\nufuFS não identificado\n");
 		return -1;
 	}
 	
-	memcpy(&sb,primeiro_bloco,sizeof(superblock)); // carrega o superblock em memória
+	inode_number = sb.inode_table_length * (BLOCK_SIZE / sizeof(inode));
+	inodes_in_a_block = BLOCK_SIZE / sizeof(inode);
 	
 	for(int i = 0; i < MAXIMUM_OPEN_FILES; i++)
 	{
@@ -62,7 +61,7 @@ int ufufs_mount(char *dispositivo)
 	return 0;
 }
 
-
+// cria o file descriptor da raiz com sucesso
 int ufufs_open(char *pathname, int flags)
 {
 	char *token;
@@ -72,16 +71,18 @@ int ufufs_open(char *pathname, int flags)
 	void *buffer = calloc(1,BLOCK_SIZE);
 	
 	int retorno = read_inode(div_fd,sb.file_table_begin,0,&atual);// carrega o inode do diretório raiz
+	
 	if(!retorno)
 		return -1;
 		
 	while(1)
 	{
 		token = strtok(pathname, "/");
+
 		// se token for uma string vazia então temos em dir o inode do arquivo que queremos
-		if(token[0] == '\0')
+		if(token == NULL)
 			break;
-		
+
 		h = 0;
 		qtd = atual.tamanho / sizeof(dir_entry);
 		for(i = atual.bloco_inicial; i <= atual.bloco_final; i++)
@@ -117,11 +118,10 @@ int ufufs_open(char *pathname, int flags)
 				break;	
 		}
 	}
-
 	free(buffer);
 	for(i = 0; i < MAXIMUM_OPEN_FILES; i++)
 	{
-		if(fd_table[i] == NULL)
+		if(fd_table[i] != NULL)
 			continue;		
 			
 		fd_table[i] = (file_descriptor *) calloc(1,sizeof(file_descriptor));	
@@ -131,7 +131,7 @@ int ufufs_open(char *pathname, int flags)
 		fd_table[i]->offset = 0;
 		fd_table[i]->tamanho = atual.tamanho;
 		fd_table[i]->escrita = flags;
-		
+	
 		return i;
 	}
 
@@ -534,5 +534,3 @@ int ufufs_close(int fd)
 		}
 	}
 	*/
-
-#endif

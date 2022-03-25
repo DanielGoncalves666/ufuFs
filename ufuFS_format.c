@@ -11,12 +11,15 @@ Módulo de formatação
 #include<stdlib.h>
 #include<math.h>
 #include<time.h>
-#include <unistd.h>
+#include<unistd.h>
 #include"estruturas.h"
 #include"bitmap.h"
 #include"bloco.h"
 
 #define INODE_RATIO 0.05
+
+extern int inode_number;
+extern int inodes_in_a_block;
 
 // abrir o device file e obter o tamanho do disco.
 // calcular a quantidade de blocos
@@ -34,7 +37,7 @@ inode criar_inode_raiz();
 int main()
 {
 	char pathname[25];
-	static int div_fd;
+	int div_fd;
 	int size, resul, entrada;
 	superblock sb;
 	void *bc;
@@ -86,10 +89,10 @@ int main()
 	bc = calloc(1,BLOCK_SIZE);
 	
 	// limpa o superbloco, bitmaps e a file_table
-	for(int i = 0; i < sb.data_table_begin; i++)
-	{
-		escrever_bloco(div_fd,i,bc);
-	}
+	//for(int i = 0; i < sb.data_table_begin; i++)
+	//{
+	//	escrever_bloco(div_fd,i,bc);
+	//}
 	
 	if(/*se o usuario tiver escolhido hard format*/ 0 )
 	{
@@ -144,7 +147,7 @@ int main()
 	inode raiz = criar_inode_raiz();// cria inode raiz
 	alterar_bitmap(div_fd,0,sb,2);// marca a posição inode 0 como ocupada
 	write_inode(div_fd,sb.file_table_begin,0, &raiz); // escreve o inode em disco
-	
+		
 	dir_entry itself = {0,"."}; // cria a entrada que aponta pro próprio diretório
 	bc = calloc(1,BLOCK_SIZE); // cria um bloco vazio
 	memcpy(bc,&itself,sizeof(dir_entry)); // copia o dir_entry pro bloco vazio
@@ -176,7 +179,7 @@ inode criar_inode_raiz()
 	raiz.criacao.segundo = agora->tm_sec;
 	
 	raiz.acesso = raiz.criacao;
-	raiz.tamanho = 1 * sizeof(dir_entry);
+	raiz.tamanho = sizeof(dir_entry);
 	
 	raiz.bloco_inicial = 0;
 	raiz.bloco_final = 0;

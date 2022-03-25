@@ -6,6 +6,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include"estruturas.h"
+#include"bitmap.h"
+#include"bloco.h"
 
 int f;
 
@@ -31,21 +33,7 @@ int main(int argc, char *argv[])
 	superblock sb;
 	
 	int offset = 0;
-	memcpy(&sb.magic_number,empty_block + offset,sizeof(int));
-	offset += sizeof(int);
-	memcpy(&sb.block_number,empty_block + offset,sizeof(unsigned int));
-	offset += sizeof(unsigned int);
-	memcpy(&sb.block_size,empty_block + offset,sizeof(unsigned int));
-	offset += sizeof(unsigned int);
-	memcpy(&sb.inode_table_length,empty_block + offset,sizeof(unsigned int));
-	offset += sizeof(unsigned int);
-	memcpy(&sb.inode_bitmap_begin,empty_block + offset,sizeof(unsigned int));
-	offset += sizeof(unsigned int);
-	memcpy(&sb.data_bitmap_begin,empty_block + offset,sizeof(unsigned int));
-	offset += sizeof(unsigned int);
-	memcpy(&sb.file_table_begin,empty_block + offset,sizeof(unsigned int));
-	offset += sizeof(unsigned int);
-	memcpy(&sb.data_table_begin,empty_block + offset,sizeof(unsigned int));
+	memcpy(&sb,empty_block,sizeof(superblock));
 	
 	
 	printf("%d\n",sb.magic_number);
