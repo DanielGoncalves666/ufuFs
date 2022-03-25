@@ -7,6 +7,9 @@ Este módulo contém funções relacionadas com a operação do sistema de arqui
 #include<stdlib.h>
 #include<string.h>
 #include<math.h>
+#include<sys/types.h>
+#include<unistd.h>
+#include<time.h>
 #include"ufuFS.h"
 #include"estruturas.h"
 #include"bitmap.h"
@@ -19,11 +22,13 @@ file_descriptor *fd_table[MAXIMUM_OPEN_FILES];
 extern int inode_number;
 extern int inodes_in_a_block;
 
+void mudar_horario(struct dataTime *mudar);
+
 /*
 ufufs_mount
 ------------
 Entrada: string contendo o nome do dispositivo
-Descrição:
+Descrição: monta o dispositivo
 Saída: -1, em falha, 0 em sucesso
 */
 int ufufs_mount(char *dispositivo)
@@ -59,6 +64,24 @@ int ufufs_mount(char *dispositivo)
 	
 	free(primeiro_bloco);
 	return 0;
+}
+
+/*
+ufufs_unmount
+------------
+Entrada: nada
+Descrição: desmonta o dispositivo
+Saída:nada
+*/
+void ufufs_unmount()
+{
+	for(int i = 0; i < MAXIMUM_OPEN_FILES; i++)
+	{	
+		free(fd_table[i]);
+	}
+	
+	if(div_fd != -1)
+		close(div_fd);
 }
 
 // cria o file descriptor da raiz com sucesso
@@ -130,6 +153,9 @@ int ufufs_open(char *pathname, int flags)
 			
 		fd_table[i] = (file_descriptor *) calloc(1,sizeof(file_descriptor));	
 		
+		mudar_horario(&(atual.acesso));
+	    write_inode(div_fd, sb.file_table_begin, atual.inode_num, &atual); // atualiza o inode
+		
 		fd_table[i]->inode_data = atual;
 		strcpy(fd_table[i]->nome,entrada.nome);
 		fd_table[i]->offset = 0;
@@ -158,7 +184,7 @@ int ufufs_read(int fd, void *destino, int qtd)
 		return -1;
 		
 	if(qtd > fd_table[fd]->tamanho) // se requisitar mais bytes do que o tamanho, lê apenas tamanho bytes
-		qtd = tamanho;
+		qtd = fd_table[fd]->tamanho;
 		
 	void *buffer = calloc(1,BLOCK_SIZE);	
 		
@@ -224,7 +250,12 @@ int ufufs_read(int fd, void *destino, int qtd)
 		}
 	}
 	
+	inode this = fd_table[fd]->inode_data;
+	mudar_horario(&(this.acesso));
+	fd_table[fd]->inode_data = this;
 	fd_table[fd]->offset += lidos;
+	write_inode(div_fd, sb.file_table_begin, this.inode_num, &this); // atualiza o inode
+	
 	free(buffer);
 	return lidos;
 }
@@ -270,7 +301,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 		alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
 		this.bloco_final = aux - 1; // altera o valor do bloco final no inode local
 		this.tamanho = qtd;
-		this.offset = qtd;
+		fd_table[fd]->offset = qtd;
 		
 		alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // marca as posições
 		
@@ -312,7 +343,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 			this.bloco_inicial = retorno;
 			this.bloco_final = retorno + num_blocos - 1;
 			this.tamanho = offset + qtd;
-			this.offset = offset + qtd;
+			fd_table[fd]->offset = offset + qtd;
 					
 			alterar_faixa_bitmap(div_fd,this.bloco_inicial,this.bloco_final,sb); // marca as posições
 
@@ -332,7 +363,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 		
 			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
 			this.tamanho = offset + qtd;
-			this.offset = offset + qtd;
+			fd_table[fd]->offset = offset + qtd;
 			this.bloco_final += blocos_extras_necessarios;			
 			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // remarca o bitmap
 				
@@ -362,7 +393,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 			
 		this.bloco_final = aux - 1; // altera o inode
 		this.tamanho = offset + qtd;
-		this.offset = offset + qtd;
+		fd_table[fd]->offset = offset + qtd;
 			
 		alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // marca as posições
 	
@@ -405,7 +436,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 			this.bloco_inicial = retorno;
 			this.bloco_final = retorno + num_blocos - 1;
 			this.tamanho = offset + qtd;
-			this.offset = offset + qtd;
+			fd_table[fd]->offset = offset + qtd;
 					
 			alterar_faixa_bitmap(div_fd,this.bloco_inicial,this.bloco_final,sb); // marca as posições
 
@@ -434,7 +465,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 		
 			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
 			this.tamanho = offset + qtd;
-			this.offset = offset + qtd;
+			fd_table[fd]->offset = offset + qtd;
 			this.bloco_final += blocos_extras_necessarios;			
 			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // remarca o bitmap
 				
@@ -464,17 +495,15 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 		if(qtd == 0)
 			break;
 	}
-		
 	
-	//altera acesso
+	mudar_horario(&(this.acesso));
+	
 	write_inode(div_fd, sb.file_table_begin, this.inode_num, &this); // atualiza o inode
 	fd_table[fd]->tamanho = this.tamanho;
-	fd_table[fd]->offset = this.offset;
 	fd_table[fd]->inode_data = this;
 
 	return ponteiro;
 }
-
 
 /*
 	   SEEK_SET 1
@@ -485,6 +514,24 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd)
 
        SEEK_END 3
               The file offset is set to the size of the file plus offset bytes.
+*/
+/*
+ufufs_seek
+-----------
+Entrada: inteiro, indicando o file descriptor
+		 inteiro sem sinal, indicando para onde mover o offset
+		 inteiro, indicando como mover
+Descrição: Move o offset no file descriptor do arquivo
+Saída: -1, em falha, 0, em sucesso
+
+ SEEK_SET 1
+     The file offset is set to offset bytes.
+
+ SEEK_CUR 2
+     The file offset is set to its current location plus offset bytes.
+
+ SEEK_END 3
+     The file offset is set to the size of the file plus offset bytes.
 */
 int ufufs_seek(int fd, unsigned int offset, int flags)
 {
@@ -508,10 +555,22 @@ int ufufs_seek(int fd, unsigned int offset, int flags)
 	{
 		fd_table[fd]->offset = fd_table[fd]->tamanho + offset - 1;
 	}
+
+	inode atual;	
+	mudar_horario(&(atual.acesso));
+	write_inode(div_fd, sb.file_table_begin, atual.inode_num, &atual); // atualiza o inode
+	fd_table[fd]->inode_data = atual;
 	
 	return 0;
 }
 
+/*
+ufufs_close
+------------
+Entrada:inteiro,indicando of file descriptor do arquivo
+Descrição: desaloca o file descriptor do arquivo
+Saída: -1, em falha, 0, em sucesso
+*/
 int ufufs_close(int fd)
 {
 	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
@@ -523,6 +582,13 @@ int ufufs_close(int fd)
 	return 0;
 }
 
+/*
+ufufs_size
+-----------
+Entrada: inteiro,indicando of file descriptor do arquivo
+Descrição: calcula o tamanho do arquivo
+Saída: inteiro, indicando o tamanho do arquivo
+*/
 int ufufs_size(int fd)
 {
 	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
@@ -532,96 +598,22 @@ int ufufs_size(int fd)
 }
 
 /*
-	if(escrita == APPEND_AT)
-	{
-		local = offset / BLOCK_SIZE; // determina o bloco onde o offset está
-		ultimo = local;
-		
+mudar_horario
+--------------
+Entrada: endereço de um struct dataTime a ser atualizada ou preenchida
+Descrição: preenche a struct dataTime com o horário atual
+Saída: nada
+*/
+void mudar_horario(struct dataTime *mudar)
+{
+	struct tm *agora;
+	time_t raw = time(NULL);
+	agora = localtime(&raw);
 	
-		if( tamanho >= offset + qtd)
-		{
-			// não precisa alocar mais blocos, talvez diminuir
-		
-			num_blocos -= (qtd - offset) / BLOCK_SIZE;
-			resto_pode_ser_escrito = BLOCK_SIZE - (offset % BLOCKSIZE);
-			resto_ser_escrito -= resto_pode_ser_escrito;
-		
-			if(resto_ser_escrito > 0)
-				num_blocos++;// vai precisar de um bloco a mais, que n vai ser escrito completamente
-			
-		
-		
-		}
-		else
-		{
-			// precisa alocar mais blocos
-
-			num_blocos -= (qtd - offset) / BLOCK_SIZE;
-			resto_ser_escrito = (qtd - offset) % BLOCK_SIZE;
-	
-			resto_pode_ser_escrito = BLOCK_SIZE - (offset % BLOCKSIZE);
-			resto_ser_escrito -= resto_pode_ser_escrito;
-		
-			if(resto_ser_escrito > 0)
-				num_blocos++;// vai precisar de um bloco a mais, que n vai ser escrito completamente
-			
-			for(i = ultimo + 1; i < num_blocos i++)
-			{
-				retorno = get_bitmap_pos_status(fd,i,sb,1);
-			
-				if(retorno == -1 || retorno == 1) // fora do data_table ou existe blocos ocupados, logo n pode expandir suficientemente
-					// procura por uma sequencia de blocos suficiente e copia os blocos anteriores
-				
-			}
-			// o arquivo pode ser expandido
-		}
-	}	
-	*/
-	
-	/*
-	if(escrita == APPEND)
-	{
-		ultimo = this.bloco_final;
-		primeiro = this.bloco_inicial;
-		resto_pode_ser_escrito = BLOCK_SIZE - (tamanho % BLOCKSIZE);
-		resto_ser_escrito -= resto_pode_ser_escrito;
-		
-		if(resto_ser_escrito > 0)
-			num_blocos++;// vai precisar de um bloco a mais, que n vai ser escrito completamente
-			
-		for(i = ultimo + 1; i < num_blocos_ i++)
-		{
-			retorno = get_bitmap_pos_status(fd,i,sb,1);
-			
-			if(retorno == -1 || retorno == 1) // fora do data_table ou existe blocos ocupados, logo n pode expandir suficientemente
-			{
-				// procura por uma sequencia de blocos suficiente e copia blocos anteriores
-				num_blocos += (ultimo - primeiro + 1);
-				retorno = get_block_sequence(div_fd, 0,sb, num_blocos);	 //retorno contém o bloco que inicia a sequencia
-				if(retorno == -1)
-					return -1;
-					
-				alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
-				
-				this.bloco_inicial = retorno;
-				this.bloco_final = retorno + num_blocos - 1; // altera o inode
-				this.tamanho = tamanho + qtd;
-				alterar_faixa_bitmap(div_fd,this.bloco_inicial,this.bloco_final,sb); // marca as posições
-
-				write_inode(div_fd, sb.file_table_begin, this.inode_num, &this); // atualiza o inode
-				for(h = this.bloco_inicial, j = primeiro ; j <= ultimo; h++, j++)
-				{
-					ler_bloco(div_fd, j, to_write);
-					escrever_bloco(div_fd, h, to_write);
-				}
-				
-				break;
-			}
-		}
-		
-		if(retorno == 0)
-		{
-			// o arquivo pode ser expandido
-		}
-	}
-	*/
+	mudar->dia = agora->tm_mday;
+	mudar->mes = agora->tm_mon + 1; 
+	mudar->ano = agora->tm_year + 1900;
+	mudar->hora = agora->tm_hour;
+	mudar->minuto = agora->tm_min; 
+	mudar->segundo = agora->tm_sec;
+}

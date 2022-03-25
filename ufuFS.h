@@ -11,11 +11,13 @@
 #define READ_WRITE 3
 
 int ufufs_mount(char *dispositivo);
+void ufufs_unmount();
 int ufufs_open(char *pathname, int flags);
 int ufufs_read(int fd, void *destino, int qtd);
 int ufufs_write(int fd, void *buffer, unsigned int qtd);
 int ufufs_seek(int fd, unsigned int offset, int flags);
 int ufufs_close(int fd);
+int ufufs_size(int fd);
 
 
 #endif

@@ -1,6 +1,9 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<sys/types.h>
+#include<fcntl.h>
+#include<unistd.h>
 #include"estruturas.h"
 #include"ufuFS.h"
 #include"bloco.h"
@@ -12,11 +15,12 @@ extern int div_fd;
 void ufuFS_shell();
 void ufuFS_help();
 void ufuFS_list();
+void copy_real_to_ufufs(char *real, char *aqui);
+void copy_ufufs_to_real(char *aqui, char *real);
 
 int main()
 {
 	ufuFS_shell();
-
 
 	return 0;
 }
@@ -24,21 +28,23 @@ int main()
 void ufuFS_help()
 {
     printf("Lista de Comandos:\n");
-    printf("\tcreate <arquivo>\n");
-    printf("\tdelete <arquivo>\n");
-    printf("\tlist\n");
-    printf("\tcopy_ufufs_to_real <ufu_arquivo> <real_arquivo>\n");
-    printf("\tcopy_real_to_ufufs <real_arquivo> <ufu_arquivo>\n");
-    printf("\texit\n");
+    printf("Obs: Espaços separam o comando de seus argumentos\n");
+    printf("\tcreate_arq <caminho> <nome>\n"); // caminho precisa terminar em um diretório
+    printf("\tcreate_dir <caminho> <nome>\n"); // caminho precisa terminar em um diretório
+    printf("\tdelete <caminho/nome>\n"); // se for um diretório precisa estar vazio
+    printf("\tlist <caminho>\n"); // se for um arquivo lista somente as informações dele 
+    printf("\tcopy_ufufs_to_real <ufu_arquivo> <real_arquivo>\n"); 
+    printf("\tcopy_real_to_ufufs <real_arquivo> <caminho> <nome>\n");// caminho precisa terminar em um diretório
+    printf("\tclear\n"); // limpa a tela
+    printf("\thelp\n"); // mostra esta lista
+    printf("\texit\n"); // fecha o programa
 }
 
 void ufuFS_shell()
 {
-	char nome_dispositivo[15];
-
-    int end = 0;
-    char rqt[256], *fn;
-    int check;
+	char nome_dispositivo[15], linha_comando[256];
+	int check;
+	char *comando, *arg1, *arg2, *arg3;
 
 	printf("\e[1;1H\e[2J");
     printf("Bem vindo ao Shell de Navegacao ufuFS\n\n");
@@ -56,15 +62,66 @@ void ufuFS_shell()
 	  	else
 	  	{
 	  		printf("Falha! Device file não encontrado ou ufuFS não identificado no dispositivo.\n");
+	  		printf("Deseja tentar novamente? 1 - sim, outro - não\n");
+	  		scanf("%d",&check);
+	  		if(check != 1)
+	  		{
+	  			printf("\nFechando...\n");
+	  			return;
+	  		}
 	  	}
 	}	
   	
-    printf("\n");
-    ufuFS_help();
-    printf("\n");
-
-	//ufuFS_list();
-    
+  	while(1)
+  	{
+  		printf("\n Shell> ");
+  		check = scanf("%[^\n]", linha_comando);
+  		
+  		comando = strtok (linha_comando, " ");
+  		
+  	
+  		if(strcmp(comando,"create_arq") == 0)
+  		{
+  		
+  		}
+  		else if(strcmp(comando,"create_dir") == 0)
+  		{
+  		
+  		}
+  		else if(strcmp(comando,"delete") == 0)
+  		{
+  		
+  		}
+  		else if(strcmp(comando,"list") == 0)
+  		{
+  		
+  		}
+  		else if(strcmp(comando,"copy_ufufs_to_real") == 0)
+  		{
+  		
+  		}
+  		else if(strcmp(comando,"copy_real_to_ufufs") == 0)
+  		{
+  		
+  		}
+  		else if(strcmp(comando,"clear") == 0)
+  		{
+  			printf("\e[1;1H\e[2J");
+  		}
+  		else if(strcmp(comando,"help") == 0)
+  		{
+  			ufuFS_help();
+  		}
+  		else if(strcmp(comando,"exit") == 0)
+  		{
+  			ufufs_unmount();
+  			return; // retorna para a main
+  		}
+  		else
+  		{
+  			printf("\nComando não identificado.");
+  		}
+  	}
 }
 
 
@@ -78,7 +135,7 @@ void ufuFS_list()
 	read_inode(div_fd,sb.file_table_begin,0,&dir_atual); // carrega o inode do diretório raiz;
 	qtd_entradas = dir_atual.tamanho / sizeof(dir_entry); 
 	
-	retorno = ufufs_open("/", OVERWRITTEN);
+	retorno = ufufs_open("/", READ_ONLY);
 	if(retorno == -1)
 		printf("erro na abertura");
 		//break;
@@ -111,7 +168,7 @@ void ufufs_create_arquivo(char *caminho, char *nome)
 {
 	int caminho_fd;
 	
-	if((caminho_fd = ufufs_open(aqui, OVERWRITTEN)) == -1)
+	if((caminho_fd = ufufs_open(caminho, WRITE_ONLY)) == -1)
 	{
 		printf("Caminho inexistente.\n");
 		
@@ -161,7 +218,7 @@ void copy_ufufs_to_real(char *aqui, char *real)
 	int tamanho;
 	void *buffer = calloc(1,BLOCK_SIZE);
 
-	if((aqui_fd = ufufs_open(aqui, OVERWRITTEN)) == -1)
+	if((aqui_fd = ufufs_open(aqui, READ_ONLY)) == -1)
 	{
 		printf("\nArquivo %s não encontrado.\n",aqui);
 		return;
@@ -211,7 +268,7 @@ void copy_real_to_ufufs(char *real, char*aqui)
 	}
 	
 	// cria o arquivo e então abre ele
-	if( /*(aqui_fd = ufufs_open(aqui, OVERWRITTEN)) == -1*/)
+	if( (aqui_fd = ufufs_open(aqui, WRITE_ONLY)) == -1)
 	{
 		printf("\nArquivo %s não encontrado.\n",aqui);
 		return;
