@@ -63,7 +63,7 @@ void ufuFS_shell()
     ufuFS_help();
     printf("\n");
 
-	ufuFS_list();
+	//ufuFS_list();
     
 }
 
@@ -105,28 +105,125 @@ void ufuFS_list()
 	ufufs_close(retorno);
 }
 
-// {
-   // int i;
-   // inode i_node;
-
-   // lseek(fd, sb.ind_bloco * sb.tamanho, SEEK_SET);
-
-   // for(i = 0; i < sb.qtd_inode; i++)
-   // {
-       // read(fd, &i_node, sizeof(inode));
-
-       // if(!i_node.nome[0]) continue;                    //pegar o nome
-
-       	// printf("%-15s  %10d bytes Criacao: %s ",
-			// i_node.nome, i_node.tamanho,                    //pegar o nome
-			// ctime((time_t *)&i_node.criacao)
-           // );
-
-           // printf("Ultimo acesso: %s",ctime((time_t *)&i_node.acesso));
-   // }
-// }
+void ufufs_create_arquivo()
+{
 
 
+}
+
+void ufufs_create_directory()
+{
+
+
+}
+
+void ufufs_delete_arquivo()
+{
+
+
+}
+
+void ufufs_delete_directory()
+{
+
+
+}
+
+void copy_ufufs_to_real(char *aqui, char *real)
+{
+	int real_fd;
+	int aqui_fd;
+	int tamanho;
+	void *buffer = calloc(1,BLOCK_SIZE);
+
+	if((aqui_fd = ufufs_open(aqui, OVERWRITTEN)) == -1)
+	{
+		printf("\nArquivo %s não encontrado.\n",aqui);
+		return;
+	}
+	
+	if( (real_fd = open(real,O_WRONLY)) == -1 )
+	{
+		printf("\nArquivo %s não encontrado.\n",real);
+		return;
+	}
+	
+	tamanho = ufufs_size(aqui_fd);
+	while(tamanho > 0)
+	{
+		if( ufufs_read(aqui_fd, buffer, BLOCK_SIZE) == -1)
+		{
+			printf("\nFalha durante a operação de cópia (leitura).\n");
+			return;
+		}
+		
+		if( write(real_fd, buffer, BLOCK_SIZE) == -1)
+		{
+			printf("\nFalha durante a operação de cópia (escrita).\n");
+			return;
+		}
+		
+		tamanho -= BLOCK_SIZE;
+	}
+
+	ufufs_close(aqui_fd);
+	close(real_fd);
+	free(buffer);
+}
+
+
+void copy_real_to_ufufs(char *real, char*aqui)
+{
+	int real_fd;
+	int aqui_fd;
+	int tamanho;
+	void *buffer = calloc(1,BLOCK_SIZE);
+	
+	if( (real_fd = open(real,O_WRONLY)) == -1 )
+	{
+		printf("\nArquivo %s não encontrado.\n",real);
+		return;
+	}
+	
+	// cria o arquivo e então abre ele
+	if( /*(aqui_fd = ufufs_open(aqui, OVERWRITTEN)) == -1*/)
+	{
+		printf("\nArquivo %s não encontrado.\n",aqui);
+		return;
+	}
+	
+	tamanho = lseek(real_fd, 0, SEEK_END);
+	while(tamanho > 0)
+	{
+		if(read(real_fd, buffer, BLOCK_SIZE) == -1)
+		{
+			printf("\nFalha durante a operação de cópia (leitura).\n");
+			return;
+		}
+		
+		if( ufufs_write(aqui_fd, buffer, BLOCK_SIZE) == -1)
+		{
+			printf("\nFalha durante a operação de cópia (escrita).\n");
+			return;
+		}
+		
+		tamanho -= BLOCK_SIZE;
+	}
+	
+	ufufs_close(aqui_fd);
+	close(real_fd);
+	free(buffer);	
+}
+
+
+/*
+	criar arquivos
+	
+	vai até o diretório onde será criado
+	aloca um inode e o preenche
+	coloca a entrada no diretório do arquivo
+	marca o bitmap de inodes
+*/
 
 
 /*
@@ -142,15 +239,6 @@ void ufuFS_list()
 */
 
 /*
-	criar arquivos
-	
-	vai até o diretório onde será criado
-	aloca um inode e o preenche
-	coloca a entrada no diretório do arquivo
-	marca o bitmap de inodes
-*/
-
-/*
 	excluir arquivos e diretórios
 	
 	localiza o arquivo a ser excluido
@@ -162,28 +250,3 @@ void ufuFS_list()
 
 
 
-/*
-	copiar arquivo do ufuFS para o sistema base
-	
-	obter caminho para onde o arquivo será copiado
-	obter caminho do arquivo a ser copiado
-	criar arquivo no destino
-	abrir arquivo a ser copiado
-	ler bloco por bloco do arquivo a ser copiado e escrever bloco por bloco no arquivo de destino
-	fechar ambos arquivos
-
-*/
-
-
-/*
-	copiar arquivo do sistema base para ufuFS
-	
-	obter caminho do arquivo a ser copiado
-	obter caminho para onde o arquivo será copiado
-	criar arquivo no destino
-	abrir arquivo a ser copiado
-	ler uma quantidade de BLOCK_SIZE e escrever no arquivo destino até que tudo tenha sido copiado
-	fechar ambos arquivos.	
-	
-
-*/

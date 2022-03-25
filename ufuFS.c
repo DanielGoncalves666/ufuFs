@@ -112,12 +112,16 @@ int ufufs_open(char *pathname, int flags)
 			}
 			
 			if(h == qtd)
+			{
+				free(buffer);
 				return -1;
+			}
 			
 			if(h == -1)
 				break;	
 		}
 	}
+	
 	free(buffer);
 	for(i = 0; i < MAXIMUM_OPEN_FILES; i++)
 	{
@@ -148,6 +152,9 @@ Saída: -1 em falha, quantidade de bytes lidos em sucesso
 */
 int ufufs_read(int fd, void *destino, int qtd)
 {
+	// e se qtd for maior doq tamanho?
+
+
 	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
 		return -1;
 		
@@ -438,6 +445,14 @@ int ufufs_close(int fd)
 	fd_table[fd] = NULL;
 	
 	return 0;
+}
+
+int ufufs_size(int fd)
+{
+	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
+		return -1;
+		
+	return fd_table[fd]->tamanho;
 }
 
 /*
