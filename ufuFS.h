@@ -6,9 +6,9 @@
 #define SEEK_CUR_UFU 2
 #define SEEK_END_UFU 3
 
-#define APPEND 1 // append no final do arquivo
-#define OVERWRITTEN 2 // reescreve desde o começo
-#define APPEND_AT 3 // append a partir do offset
+#define READ_ONLY 1
+#define WRITE_ONLY 2
+#define READ_WRITE 3
 
 int ufufs_mount(char *dispositivo);
 int ufufs_open(char *pathname, int flags);

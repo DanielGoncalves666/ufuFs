@@ -154,9 +154,11 @@ int ufufs_read(int fd, void *destino, int qtd)
 {
 	// e se qtd for maior doq tamanho?
 
-
-	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
+	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL || fd_table[fd]->escrita == WRITE_ONLY)
 		return -1;
+		
+	if(qtd > fd_table[fd]->tamanho) // se requisitar mais bytes do que o tamanho, lê apenas tamanho bytes
+		qtd = tamanho;
 		
 	void *buffer = calloc(1,BLOCK_SIZE);	
 		
@@ -236,165 +238,239 @@ Saída: -1 em falha, quantidade de bytes escritos em sucesso
 */
 int ufufs_write(int fd, void *buffer, unsigned int qtd)
 {
-	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
+	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL || fd_table[fd]->escrita == READ_ONLY)
 		return -1;
 		
+		// escrita a partir do offset
+		
 	inode this = fd_table[fd]->inode_data;
-	int escrita = fd_table[fd]->escrita;
 	int offset = fd_table[fd]->offset;
 	int tamanho = fd_table[fd]->tamanho;
 	int num_blocos = qtd / BLOCK_SIZE;//número de blocos completos necessários
 	int resto_ser_escrito = qtd % BLOCK_SIZE; // número de bytes a serem escritos que n formam um bloco
-	int resto_pode_ser_escrito; // quantidade de bytes que podem ser escritos no último bloco de dados do arquivo
+	int resto_pode_ser_escrito = BLOCK_SIZE - (offset % BLOCK_SIZE); // quantidade de bytes que podem ser escritos no último bloco de dados do arquivo
 	
 	int i, h, j, ponteiro,aux, retorno;
-	int ultimo, primeiro, local;
+	int ultimo, primeiro, local, novo_inicio = -1;
+	int inside_bloco,inside_offset, blocos_extras_necessarios;
+	
 	void *to_write = calloc(1,BLOCK_SIZE);	
 	
-	if(escrita == OVERWRITTEN)
+	
+	if( offset == 0 && qtd <= tamanho + resto_pode_ser_escrito) // quantidade a ser escrita tem que ser menor que o tamanho mais o resto do ultimo bloco
 	{
-		// se a reescrita contiver menos bytes
-		if(qtd <= tamanho)
+		// reescreve todo o arquivo
+		
+		if(resto_ser_escrito > 0) // ultimo bloco será incompleto
+			num_blocos++;
+		
+		i = sb.data_table_begin + this.bloco_inicial; // começo da escrita
+		aux = sb.data_table_begin + this.bloco_inicial + num_blocos; 
+		
+		alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
+		this.bloco_final = aux - 1; // altera o valor do bloco final no inode local
+		this.tamanho = qtd;
+		this.offset = qtd;
+		
+		alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // marca as posições
+		
+		ponteiro = 0;
+	}
+	else if(offset == 0 && qtd > tamanho + resto_pode_ser_escrito)
+	{
+		// precisa de alocação
+		blocos_extras_necessarios = (qtd - tamanho) / BLOCK_SIZE; // blocos completos extras necessários
+		resto_ser_escrito = (qtd - tamanho) % BLOCK_SIZE; // bytes a serem escritos que n formam um bloco
+		resto_pode_ser_escrito =  BLOCK_SIZE - (tamanho % BLOCK_SIZE); // bytes que podem ser escritos no ultimo bloco
+		resto_ser_escrito -= resto_pode_ser_escrito; // bytes a serem escritos que n formam um bloco
+			
+		if(resto_ser_escrito > 0)
+			blocos_extras_necessarios++;// vai precisar de um bloco a mais, que n vai ser escrito completamente
+			
+		for(i = ultimo + 1; i < blocos_extras_necessarios; i++)
 		{
-			i = sb.data_table_begin + this.bloco_inicial;
-			aux = sb.data_table_begin + this.bloco_inicial + num_blocos;
+			//verifica se a quantidade necessária de bloco seguintes está livre
+		
+			retorno = get_bitmap_pos_status(fd,i,sb,1);
 			
+			if(retorno == -1 || retorno == 1) // fora do data_table ou existe blocos ocupados, logo n pode expandir suficientemente
+			{		// procura por uma sequencia de blocos suficiente e copia os blocos anteriores
+				num_blocos += (ultimo - primeiro + 1) + blocos_extras_necessarios;
+				retorno = get_block_sequence(div_fd, 0,sb, num_blocos);	 //retorno contém o bloco que inicia a sequencia
+				
+				if(retorno == -1) // impossivel realocar
+					return -1;
+					
+				break;
+			}
+		}
+			
+		if(novo_inicio != -1)
+		{
 			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
-			
-			this.bloco_final = aux - 1; // altera o inode
-			this.tamanho = qtd;
-			
-			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // marca as posições
+					
+			this.bloco_inicial = retorno;
+			this.bloco_final = retorno + num_blocos - 1;
+			this.tamanho = offset + qtd;
+			this.offset = offset + qtd;
+					
+			alterar_faixa_bitmap(div_fd,this.bloco_inicial,this.bloco_final,sb); // marca as posições
+
+			// daqui pra frente é escrever qtd == tamanho bytes desde o começo
+
+			i = sb.data_table_begin + this.bloco_inicial;
+			aux = sb.data_table_begin + this.bloco_final + 1;
 			
 			ponteiro = 0;
-			for(; i < aux; i++)
-			{
-				if(qtd < BLOCK_SIZE)
-				{
-					memcpy(to_write, buffer + ponteiro, qtd);
-					ponteiro += qtd;
-					qtd = 0;
-				}
-				else
-				{
-					memcpy(to_write, buffer + ponteiro, BLOCK_SIZE);
-					ponteiro += BLOCK_SIZE;
-					qtd -= BLOCK_SIZE;
-				}
-						
-				escrever_bloco(div_fd,i, to_write);
-						
-				if(qtd == 0)
-					break;
-			}
-		}
-		else // se contiver mais bytes
+		}	
+			
+		// existem blocos suficientes para o arquivo ser expandido
+		if(retorno == 0)
 		{
-			ultimo = this.bloco_final;
-			primeiro = this.bloco_inicial;
-			int blocos_extras_necessarios = (qtd - tamanho) / BLOCK_SIZE; // blocos completos extras necessários
-			resto_ser_escrito = (qtd - tamanho) % BLOCK_SIZE; // bytes a serem escritos que n formam um bloco
-			resto_pode_ser_escrito =  BLOCK_SIZE - (tamanho % BLOCK_SIZE); // bytes que podem ser escritos no ultimo bloco
-			resto_ser_escrito -= resto_pode_ser_escrito;
-			
-			if(resto_ser_escrito > 0)
-				blocos_extras_necessarios++;// vai precisar de um bloco a mais, que n vai ser escrito completamente
-			
-			for(i = ultimo + 1; i < blocos_extras_necessarios; i++)
-			{
-				retorno = get_bitmap_pos_status(fd,i,sb,1);
-			
-				if(retorno == -1 || retorno == 1) // fora do data_table ou existe blocos ocupados, logo n pode expandir suficientemente
-					// procura por uma sequencia de blocos suficiente e copia os blocos anteriores
-					num_blocos += (ultimo - primeiro + 1);
-					retorno = get_block_sequence(div_fd, 0,sb, num_blocos);	 //retorno contém o bloco que inicia a sequencia
-					if(retorno == -1)
-						return -1;
-						
-					alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
-					
-					this.bloco_inicial = retorno;
-					this.bloco_final = retorno + num_blocos - 1; // altera o inode
-					this.tamanho = tamanho + qtd;
-					
-					alterar_faixa_bitmap(div_fd,this.bloco_inicial,this.bloco_final,sb); // marca as posições
-
-					for(h = this.bloco_inicial, j = primeiro ; j <= ultimo; h++, j++)
-					{
-						ler_bloco(div_fd, j, to_write);
-						escrever_bloco(div_fd, h, to_write);
-					}
-					
-					memcpy(to_write + offset, buffer, BLOCK_SIZE - offset);
-					qtd -= BLOCK_SIZE - offset;
-					
-					ponteiro = 0;
-					for(; i < aux; i++)
-					{
-						if(qtd < BLOCK_SIZE)
-						{
-							memcpy(to_write, buffer + ponteiro, qtd);
-							ponteiro += qtd;
-							qtd = 0;
-						}
-						else
-						{
-							memcpy(to_write, buffer + ponteiro, BLOCK_SIZE);
-							ponteiro += BLOCK_SIZE;
-							qtd -= BLOCK_SIZE;
-						}
-								
-						escrever_bloco(div_fd,i, to_write);
-								
-						if(qtd == 0)
-							break;
-					}
-					
-					break;
-			}
-			
-			if(retorno == 0)
-			{
-				// o arquivo pode ser expandido
-				alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
-			
-				this.bloco_final += blocos_extras_necessarios;
-				this.tamanho = qtd;
-				
-				alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // remarca o bitmap
-				
-				ponteiro = 0;
-				for(; i < aux; i++)
-				{
-					if(qtd < BLOCK_SIZE)
-					{
-						memcpy(to_write, buffer + ponteiro, qtd);
-						ponteiro += qtd;
-						qtd = 0;
-					}
-					else
-					{
-						memcpy(to_write, buffer + ponteiro, BLOCK_SIZE);
-						ponteiro += BLOCK_SIZE;
-						qtd -= BLOCK_SIZE;
-					}
-							
-					escrever_bloco(div_fd,i, to_write);
-							
-					if(qtd == 0)
-						break;
-				}
-			}
+			i = sb.data_table_begin + this.bloco_final + 1;
+			aux = sb.data_table_begin + this.bloco_final + blocos_extras_necessarios + 1;
 		
+			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
+			this.tamanho = offset + qtd;
+			this.offset = offset + qtd;
+			this.bloco_final += blocos_extras_necessarios;			
+			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // remarca o bitmap
+				
+			qtd -= resto_pode_ser_escrito;	
+			ponteiro = resto_pode_ser_escrito;
 		}
 	
+	}
+	else if(offset > 0 && qtd <= tamanho + resto_pode_ser_escrito - offset) // quantidade a ser escrita tem que ser menor que a quantidade de bytes disponíveis já alocados
+	{
+		if(resto_ser_escrito > resto_pode_ser_escrito)
+			num_blocos++;
+			
+		inside_bloco = offset / BLOCK_SIZE; // blocos completos
+		inside_offset = offset % BLOCK_SIZE; 
+	
+		ler_bloco(div_fd, sb.data_table_begin + inside_bloco + 1, to_write);
+		memcpy(to_write + inside_offset,buffer,resto_pode_ser_escrito); // preenche o bloco
+		qtd -= resto_pode_ser_escrito;
+		
+		escrever_bloco(div_fd,sb.data_table_begin + inside_bloco + 1, to_write);
+	
+		i = sb.data_table_begin + inside_bloco + 2;
+		aux = sb.data_table_begin + inside_bloco + 2 + num_blocos;
+			
+		alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
+			
+		this.bloco_final = aux - 1; // altera o inode
+		this.tamanho = offset + qtd;
+		this.offset = offset + qtd;
+			
+		alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // marca as posições
+	
+		ponteiro = resto_pode_ser_escrito;		
+	}
+	else
+	{
+		// precisa de alocação
+
+		blocos_extras_necessarios = (qtd - tamanho) / BLOCK_SIZE; // blocos completos extras necessários
+		resto_ser_escrito = (qtd - tamanho) % BLOCK_SIZE; // bytes a serem escritos que n formam um bloco
+		resto_pode_ser_escrito =  BLOCK_SIZE - (tamanho % BLOCK_SIZE); // bytes que podem ser escritos no ultimo bloco
+		resto_ser_escrito -= resto_pode_ser_escrito; // bytes a serem escritos que n formam um bloco
+			
+		if(resto_ser_escrito > 0)
+			blocos_extras_necessarios++;// vai precisar de um bloco a mais, que n vai ser escrito completamente
+			
+		for(i = ultimo + 1; i < blocos_extras_necessarios; i++)
+		{
+			//verifica se a quantidade necessária de bloco seguintes está livre
+		
+			retorno = get_bitmap_pos_status(fd,i,sb,1);
+			
+			if(retorno == -1 || retorno == 1) // fora do data_table ou existe blocos ocupados, logo n pode expandir suficientemente
+			{		// procura por uma sequencia de blocos suficiente e copia os blocos anteriores
+				num_blocos += (ultimo - primeiro + 1) + blocos_extras_necessarios;
+				retorno = get_block_sequence(div_fd, 0,sb, num_blocos);	 //retorno contém o bloco que inicia a sequencia
+				
+				if(retorno == -1) // impossivel realocar
+					return -1;
+					
+				break;
+			}
+		}
+			
+		if(novo_inicio != -1)
+		{
+			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
+					
+			this.bloco_inicial = retorno;
+			this.bloco_final = retorno + num_blocos - 1;
+			this.tamanho = offset + qtd;
+			this.offset = offset + qtd;
+					
+			alterar_faixa_bitmap(div_fd,this.bloco_inicial,this.bloco_final,sb); // marca as posições
+
+			// daqui pra frente é escrever qtd == tamanho bytes desde o começo
+
+			i = sb.data_table_begin + this.bloco_inicial;
+			aux = sb.data_table_begin + this.bloco_final + 1;
+			
+			ponteiro = 0;
+		}	
+			
+		// existem blocos suficientes para o arquivo ser expandido
+		if(retorno == 0)
+		{
+	
+			inside_bloco = offset / BLOCK_SIZE; // blocos completos
+			inside_offset = offset % BLOCK_SIZE; 
+	
+			ler_bloco(div_fd, sb.data_table_begin + inside_bloco + 1, to_write);
+			memcpy(to_write + inside_offset,buffer,resto_pode_ser_escrito); // preenche o bloco
+			
+			escrever_bloco(div_fd,sb.data_table_begin + inside_bloco + 1, to_write);
+					
+			i = sb.data_table_begin + this.bloco_final + 1;
+			aux = sb.data_table_begin + this.bloco_final + blocos_extras_necessarios + 1;
+		
+			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // zera o bitmap
+			this.tamanho = offset + qtd;
+			this.offset = offset + qtd;
+			this.bloco_final += blocos_extras_necessarios;			
+			alterar_faixa_bitmap(div_fd, this.bloco_inicial,this.bloco_final,sb); // remarca o bitmap
+				
+			qtd -= resto_pode_ser_escrito;	
+			ponteiro = resto_pode_ser_escrito;
+		}
+		
+	}
+	
+	for(; i < aux; i++)
+	{
+		if(qtd < BLOCK_SIZE)
+		{
+			memcpy(to_write, buffer + ponteiro, qtd);
+			ponteiro += qtd;
+			qtd = 0;
+		}
+		else
+		{
+			memcpy(to_write, buffer + ponteiro, BLOCK_SIZE);
+			ponteiro += BLOCK_SIZE;
+			qtd -= BLOCK_SIZE;
+		}
+							
+		escrever_bloco(div_fd,i, to_write);
+							
+		if(qtd == 0)
+			break;
 	}
 		
 	
 	//altera acesso
 	write_inode(div_fd, sb.file_table_begin, this.inode_num, &this); // atualiza o inode
 	fd_table[fd]->tamanho = this.tamanho;
-	fd_table[fd]->offset += ponteiro;
+	fd_table[fd]->offset = this.offset;
+	fd_table[fd]->inode_data = this;
 
 	return ponteiro;
 }

@@ -27,8 +27,8 @@ void ufuFS_help()
     printf("\tcreate <arquivo>\n");
     printf("\tdelete <arquivo>\n");
     printf("\tlist\n");
-    printf("\tcopy_to_usb <caminho>\n");
-    printf("\tcopy_to_so <arquivo>\n");
+    printf("\tcopy_ufufs_to_real <ufu_arquivo> <real_arquivo>\n");
+    printf("\tcopy_real_to_ufufs <real_arquivo> <ufu_arquivo>\n");
     printf("\texit\n");
 }
 
@@ -105,9 +105,26 @@ void ufuFS_list()
 	ufufs_close(retorno);
 }
 
-void ufufs_create_arquivo()
-{
 
+// create_file <caminho> <nome>       cria um arquivo vazio, caminho precisa terminar em um diretório
+void ufufs_create_arquivo(char *caminho, char *nome)
+{
+	int caminho_fd;
+	
+	if((caminho_fd = ufufs_open(aqui, OVERWRITTEN)) == -1)
+	{
+		printf("Caminho inexistente.\n");
+		
+	}
+
+	/*
+	criar arquivos
+	
+	vai até o diretório onde será criado
+	aloca um inode e o preenche
+	coloca a entrada no diretório do arquivo
+	marca o bitmap de inodes
+*/
 
 }
 
@@ -119,7 +136,15 @@ void ufufs_create_directory()
 
 void ufufs_delete_arquivo()
 {
-
+	/*
+	excluir arquivos e diretórios
+	
+	localiza o arquivo a ser excluido
+	desmarca o bitmap de dados
+	desmarca o bitmap do inode
+	zera o inode
+	remove a entrada do diretório
+*/
 
 }
 
@@ -214,39 +239,6 @@ void copy_real_to_ufufs(char *real, char*aqui)
 	close(real_fd);
 	free(buffer);	
 }
-
-
-/*
-	criar arquivos
-	
-	vai até o diretório onde será criado
-	aloca um inode e o preenche
-	coloca a entrada no diretório do arquivo
-	marca o bitmap de inodes
-*/
-
-
-/*
-	Funcionalidades necessárias:
-		criar arquivos e diretórios
-		excluir arquivos e diretórios
-		listar os arquivos armazenados (lista em ordem alfabetica, usar uma arvore AVL)
-		copiar arquivo do ufuFS para o sistema base e vice-versa
-
-
-
-	Pode ser útil saber como pegar o path em que o processo está trabalhando
-*/
-
-/*
-	excluir arquivos e diretórios
-	
-	localiza o arquivo a ser excluido
-	desmarca o bitmap de dados
-	desmarca o bitmap do inode
-	zera o inode
-	remove a entrada do diretório
-*/
 
 
 
