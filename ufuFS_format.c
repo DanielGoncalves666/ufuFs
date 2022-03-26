@@ -29,7 +29,7 @@ int main()
 	superblock sb;
 	void *bc;
 
-	printf("\nEntre com o caminho do device file para o dispositivo a ser formatado.\n");
+	printf("\nEntre com o caminho do device file para o dispositivo a ser formatado(Ex: /dev/sdXX).\n");
 	scanf("%s",pathname);
 
 	size = abrir_dispositivo(pathname, &div_fd); // size tem a quantidade de blocos no dispositivo

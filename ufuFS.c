@@ -19,8 +19,6 @@ file_descriptor *fd_table[MAXIMUM_OPEN_FILES];
 extern int inode_number;
 extern int inodes_in_a_block;
 
-void mudar_horario(struct dataTime *mudar);
-
 /*
 ufufs_mount
 ------------
@@ -91,17 +89,19 @@ int ufufs_open(char *pathname, int flags)
 	void *buffer = calloc(1,BLOCK_SIZE);
 	
 	int retorno = read_inode(div_fd,sb.file_table_begin,0,&atual);// carrega o inode do diretório raiz
-	
+	strcpy(entrada.nome,"/");
+	entrada.numero_inode = 0;
+
 	if(!retorno)
 		return -1;
-		
-	while(1)
-	{
-		token = strtok(pathname, "/");
 
+	token = strtok(pathname, "/");
+	do
+	{	
 		// se token for uma string vazia então temos em dir o inode do arquivo que queremos
 		if(token == NULL)
 			break;
+		
 
 		h = 0;
 		qtd = atual.tamanho / sizeof(dir_entry);
@@ -140,7 +140,9 @@ int ufufs_open(char *pathname, int flags)
 			if(h == -1)
 				break;	
 		}
-	}
+		
+		token = strtok(NULL, "/");
+	}while(1);
 	
 	free(buffer);
 	for(i = 0; i < MAXIMUM_OPEN_FILES; i++)
@@ -170,12 +172,11 @@ int ufufs_open(char *pathname, int flags)
 ufufs_read
 ----------
 Entrada: inteiro indicando o file descriptor do arquivo, ponteiro para o posição da memória onde os dados lidos devem ser armazenados, inteiro indicando a quantidade de bytes a serem lidos
-Descrição: 
+Descrição: tenta ler qtd bytes do arquivo indicado pelo file descriptor fd. Os bytes lidos são colocados em destino. Se caso qtd for maior que o tamanho do arquivo, apenas tamanho bytes são lidos.
 Saída: -1 em falha, quantidade de bytes lidos em sucesso
 */
 int ufufs_read(int fd, void *destino, int qtd)
 {
-	// e se qtd for maior doq tamanho?
 
 	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL || fd_table[fd]->escrita == WRITE_ONLY)
 		return -1;
@@ -261,7 +262,7 @@ int ufufs_read(int fd, void *destino, int qtd)
 ufufs_write
 ----------
 Entrada: inteiro indicando o file descriptor do arquivo, ponteiro para o posição da memória onde os dados a serem escritos estão armazenados, inteiro indicando a quantidade de bytes a serem escritos
-Descrição: 
+Descrição: escreve no arquivo indicando pelo file descriptor fd. Os dados a serem escritos estão em buffer e a quantidade é indicada por qtd. A escrita começa no offset do arquivo e calcular dado depois dele é perdido. Caso seja necessário mais espaço, é alocado.
 Saída: -1 em falha, quantidade de bytes escritos em sucesso
 */
 int ufufs_write(int fd, void *buffer, unsigned int qtd)
@@ -590,7 +591,7 @@ ufufs_size
 -----------
 Entrada: inteiro,indicando of file descriptor do arquivo
 Descrição: calcula o tamanho do arquivo
-Saída: inteiro, indicando o tamanho do arquivo
+Saída: inteiro, indicando o tamanho do arquivo, em sucesso, -1, em falha
 */
 int ufufs_size(int fd)
 {
@@ -599,6 +600,22 @@ int ufufs_size(int fd)
 		
 	return fd_table[fd]->tamanho;
 }
+
+/*
+ufufs_tipo
+-----------
+Entrada: inteiro,indicando of file descriptor do arquivo
+Descrição: consulta o tipo
+Saída: inteiro, indicando o tipo, em sucesso, -1 em falha
+*/
+short int ufufs_tipo(int fd)
+{
+	if(fd < 0 || fd >= MAXIMUM_OPEN_FILES || fd_table[fd] == NULL)
+		return -1;
+		
+	return fd_table[fd]->inode_data.tipo;
+}
+
 
 /*
 mudar_horario

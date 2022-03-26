@@ -13,6 +13,7 @@ os camandos seguem um padrão de separação entre argumentos com espaço. Qualq
 
 extern superblock sb;
 extern int div_fd;
+extern file_descriptor *fd_table[MAXIMUM_OPEN_FILES];
 
 void ufuFS_help();
 void ufuFS_shell();
@@ -203,7 +204,7 @@ void ufuFS_list(char *caminho)
 {
 	inode dir_atual, entrada;
 	int qtd_entradas;
-	int i, h, retorno;
+	int h, retorno;
 	dir_entry *buffer = (dir_entry *) calloc(1,sizeof(dir_entry));
 
 	read_inode(div_fd,sb.file_table_begin,0,&dir_atual); // carrega o inode do diretório raiz;
@@ -215,9 +216,7 @@ void ufuFS_list(char *caminho)
 		printf("\nErro na abertura.");
 		return;
 	}
-		
-	printf("passou");	
-		
+		printf("%d",qtd_entradas);
 	for(h = 0; h < qtd_entradas;)
 	{
 		if(ufufs_read(retorno,buffer, sizeof(dir_entry)) == -1)
@@ -246,22 +245,44 @@ void ufuFS_list(char *caminho)
 void ufufs_create_arquivo(char *caminho, char *nome)
 {
 	int caminho_fd;
+	inode novo;
 	
 	if((caminho_fd = ufufs_open(caminho, WRITE_ONLY)) == -1)
 	{
 		printf("Caminho inexistente.\n");
-		
+		return;
 	}
-
-	/*
-	criar arquivos
 	
-	vai até o diretório onde será criado
-	aloca um inode e o preenche
-	coloca a entrada no diretório do arquivo
-	marca o bitmap de inodes
-*/
-
+	if(ufufs_tipo(caminho_fd) != DIRETORIO)
+	{
+		printf("Caminhos terminando em arquivo são inválidos.\n");
+		return;
+	}
+	
+	// cria novo inode
+	novo.tipo = ARQUIVO;
+	novo.inode_num = obter_inode_livre(div_fd,sb);
+	mudar_horario(&(novo.criacao));
+	mudar_horario(&(novo.acesso));
+	novo.tamanho = 0;
+	novo.bloco_inicial = novo.bloco_final = get_block_sequence(div_fd, 0, sb,1);
+	
+	// salva e marca bitmap de inodes
+	write_inode(div_fd, sb.file_table_begin, novo.inode_num, &novo); // escreve o inode no disco
+	alterar_bitmap(div_fd, novo.inode_num,sb, 2); // altera bitmap de inodes
+	
+    alterar_faixa_bitmap(div_fd,novo.bloco_inicial, novo.bloco_final,sb); // marca o bitmap de dados
+	
+	dir_entry de;
+	de.numero_inode = novo.inode_num;
+	strcpy(de.nome,nome);
+	
+	ufufs_seek(caminho_fd,0,SEEK_END);
+	ufufs_write(caminho_fd,&de,sizeof(dir_entry)); // escreve a entrada de diretório
+	
+	ufufs_close(caminho_fd);
+	
+	printf("\nArquivo criado com sucesso!\n");
 }
 
 void ufufs_create_directory(char *caminho, char *nome)

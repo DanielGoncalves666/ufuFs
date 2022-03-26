@@ -22,6 +22,7 @@ int ufufs_write(int fd, void *buffer, unsigned int qtd);
 int ufufs_seek(int fd, unsigned int offset, int flags);
 int ufufs_close(int fd);
 int ufufs_size(int fd);
-
+short int ufufs_tipo(int fd);
+void mudar_horario(struct dataTime *mudar);
 
 #endif
