@@ -2,6 +2,7 @@
 #include<math.h>
 #include<string.h>
 #include"ufuFS.h"
+#include<stdio.h>
 
 
 /*
@@ -14,7 +15,7 @@ Saída: -1, em falha, inteiro não negativo indicando o inode livre encontrado
 */
 int obter_inode_livre(int fd, superblock sb)
 {
-	unsigned char *bitmap = (unsigned char *) malloc(sizeof(unsigned char) * BLOCK_SIZE);
+	unsigned char *bitmap = (unsigned char *) calloc(1,BLOCK_SIZE);
 	int num_inode = 0;
 
 	if(fd < 0)
@@ -45,7 +46,7 @@ Entrada: unsigned char, contendo o byte
          caracter, indicando o bit procurado, '0', ou '1'
          inteiro, indicando o sentido, -1 pra esquerda pra direita e 1 da direita pra esquerda
 Descrição: procura pelo primeiro bit dado no sentido indicado
-Saída: inteiro indicando o primeiro zero, da esquerda pra direita; -1 se não existir nenhum
+Saída: inteiro indicando o primeiro zero, da esquerda pra direita; -1 se não existir nenhum (incluindo quando sentido e bit são valores inválidos
 */
 int localizar_bit(unsigned char valor, char bit, int sentido)
 {
@@ -64,11 +65,22 @@ int localizar_bit(unsigned char valor, char bit, int sentido)
 	}	
 	// preenche o vetor da direita pra esquerda de modo a deixar nele o número na ordem correta
 	
-	i = sentido == -1 ? 0 : 7;
-	for(; i < (sentido == -1 ? 7 : 0); i += (sentido == -1? 1 : -1))
+	if( sentido == -1)
 	{
-		if(vetor[i] == bit)
-			return i;
+		for(i = 0; i < 8; i++)
+		{
+			if(vetor[i] == bit)
+				return i;
+		}
+	
+	}
+	else if(sentido == 1)
+	{
+		for(i = 7; i >= 0; i--)
+		{
+			if(vetor[i] == bit)
+				return i;
+		}
 	}
 
 	return -1;
@@ -95,10 +107,9 @@ int alterar_bitmap(int fd, int number, superblock sb, int tipo)
 	int b = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
 
 	b = b + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
-	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
-	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
-	
-	// VERIFICA SE OS VALORES OBTIDOS FAZEM SENTIDO
+	int in_block = number % (BLOCK_SIZE * 8);
+	int offset = in_block / 8; // byte onde está o bit referente ao bloco ou inode
+	int final_offset = in_block % 8; // offset do bit dentro do byte
 	
 	if( ler_bloco(fd,b,bitmap) == 0)
 		return 0;
@@ -122,6 +133,8 @@ Saída: retorna o char valor com o bit em pos invertido
 */
 unsigned char inverter_bit(unsigned char valor, int pos)
 {
+	// erros de execução se pos for fora dos limites
+	
 	int i = 7,h;
 	int resto, aux;
 	char vetor[8] = {'0','0','0','0','0','0','0','0'};
@@ -167,54 +180,78 @@ int alterar_faixa_bitmap(int fd, int inicio, int fim, superblock sb)
 	int b = sb.data_bitmap_begin;
 	
 	b = b + inicio / (BLOCK_SIZE * 8); // número do bloco onde o inicia fica
-	int resto_inicial = 8 - ((inicio + 1) % 8); // quantidade de bits em um byte incompleto
+	int resto_inicial = 8 - ((inicio + 1) % 8) + 1; // quantidade de bits em um byte incompleto
 	int resto_final = (fim + 1) % 8; // quantidade de bits final em um byte imcompleto
 	int qtd = fim - inicio + 1;
+	int in_block = inicio % (BLOCK_SIZE * 8);
+	int in_block_fim = fim % (BLOCK_SIZE * 8);
 	int inside_offset;
 
 	int i,h,j;
+	
+	if( in_block / 8 == in_block_fim / 8)
+	{
+		// faixa inteira dentro de um byte
+		for(h = inicio; h <= fim; h++)// altera as posições do byte incompleto
+		{
+			alterar_bitmap(fd, h, sb, 1); // altera posição por posição
+		}
 
+		return 1;
+	}	
+	
+	if(resto_inicial == 8)
+		resto_inicial = 0;
+	
+	inside_offset = in_block / 8; // byte dentro do bloco
 	for(i = b; i < sb.file_table_begin; i++)
 	{
-		ler_bloco(fd,i,bitmap);
-		
-		inside_offset = (inicio % (BLOCK_SIZE * 8)) / 8; // byte dentro do bloco;
-		if(resto_inicial != 0)
+		if(resto_inicial != 0) // apenas quando existe um byte inicial incompleto
 		{
-			for(h = inicio, j=0; j < resto_inicial; j++, h++)
+			for(h = inicio, j=0; j < resto_inicial; j++, h++)// altera as posições do byte incompleto
 			{
 				alterar_bitmap(fd, h, sb, 1); // altera posição por posição
 			}
+
 			qtd -= resto_inicial;
 			inicio += resto_inicial; // como alteramos os primeiros bits, movemos o apontador de inicio
 			resto_inicial = 0;
 			inside_offset++;
+
+			if(qtd == 0)
+				break;
 		}
-		
+
+		ler_bloco(fd,i,bitmap);
 		while(qtd > 8 && inside_offset < BLOCK_SIZE)
 		{
 			if(bitmap[inside_offset] == 0)// inverte o byte
-				bitmap[inside_offset] = 1;
+				bitmap[inside_offset] = 255;
 			else
 				bitmap[inside_offset] = 0;
-		
+
 			inicio += 8;
 			inside_offset++;
 			qtd -= 8;
 		}
+		escrever_bloco(fd,i,bitmap);
 		
-		if(qtd < 8 && inside_offset < BLOCK_SIZE)
+		if(qtd == 0)
+			break;
+		
+		if(qtd < 8 && inside_offset < BLOCK_SIZE) // byte final incompleto
 		{
-			for(h = inicio, j=0; j < resto_final; j++, h++)
+			for(h = inside_offset * 8, j=0; j < resto_final; j++, h++)
 			{
 				alterar_bitmap(fd, h,sb, 1); // altera posição por posição
 			}
 			
 			resto_final = 0;
 			qtd -= resto_final;
-			inside_offset++;
 		}
-		
+
+		inside_offset = 0;
+				
 		if(qtd == 0)
 			break;
 	}
@@ -239,8 +276,9 @@ int get_bitmap_pos_status(int fd, int number, superblock sb, int tipo)
 	int b = tipo == 1? sb.data_bitmap_begin : sb.inode_bitmap_begin;
 
 	b = b + number / (BLOCK_SIZE * 8); // número do bloco onde a posição fica
-	int offset = (number % (BLOCK_SIZE * 8)) / 8; // byte onde está o bit referente ao bloco ou inode
-	int final_offset = (number % (BLOCK_SIZE * 8)) % 8; // offset do bit dentro do byte
+	int in_block = number % (BLOCK_SIZE * 8);
+	int offset = in_block / 8; // byte onde está o bit referente ao bloco ou inode
+	int final_offset = in_block % 8; // offset do bit dentro do byte
 	
 	if(b >= (tipo == 1? sb.file_table_begin : sb.data_bitmap_begin))
 		return -1; 
@@ -277,57 +315,119 @@ Saída: -1, se nenhuma sequencia foi encontra, um inteiro, indicando o bloco que
 */
 int get_block_sequence(int fd, int comeco, superblock sb, int qtd)
 {
-	
-	unsigned char *data_block = (unsigned char *) calloc(1,BLOCK_SIZE);
+	// sempre que formos chamar essa função em um programa, comeco é zerado. É uma variável se uso da própria função
 	int min_completos = (qtd / 8); // quantidade minima de bytes que precisam estar zerados, podem sobrar até 7 bits
 	int resto = qtd % 8;
+	unsigned char *data_block = (unsigned char *) calloc(1,BLOCK_SIZE);
 	unsigned char *vazio = (unsigned char *) calloc(1,min_completos);
 
 	int j,k,i,h;
 	int aux,antes = 0,depois;
-
+	
 	for(i = sb.data_bitmap_begin + comeco, j = 0; i < sb.file_table_begin; i++, j++)
 	{
 		ler_bloco(fd,i,data_block);
 		
 		for(h = 0; h < BLOCK_SIZE - min_completos - 1; h++)
 		{
+			if(min_completos == 0)
+			{
+				if(memcmp(data_block + h, vazio, 1) != 255)
+				{
+					antes = localizar_bit(data_block[h], '1', 1);
+					
+					if(antes + 1 < 8)
+					{			
+						aux = resto - (8 - (antes + 1));
+						
+						if(aux <= 0)
+						{
+							return j * (BLOCK_SIZE * 8) + (h * 8) + (antes + 1);
+						}
+						else
+						{
+							depois = localizar_bit(data_block[h + 1], '1', -1);
+							
+							if(aux - depois <= 0)
+							{
+								return j * (BLOCK_SIZE * 8) + (h * 8) + (antes + 1);
+							}
+						}
+					}
+				}
+			}
+		
 			if( memcmp(data_block + h, vazio, min_completos) == 0) // procura pela quantidade determinada de blocos zerados seguidos
 			{
 				antes = 0;
 				if(h > 0) // se não começar no primeiro byte, verifica o anterior
 				{
-					antes = 8 - localizar_bit(*(data_block + h),'1',1); // quantidade de bits zerados na direita do byte
+					antes = 8 - (localizar_bit(*(data_block + h - 1),'1',1) + 1); // quantidade de bits zerados na direita do byte
 					aux = resto - antes; // quantidade de bits fora de bytes a serem alocados
 				}
 				else
 					aux = resto;
 					
-				if(aux <= 0)
-					return j * (BLOCK_SIZE * 8) + (h * 8) - antes;
+				if(aux <= 0 || (qtd - antes) / 8 == 0)
+					return j * (BLOCK_SIZE * 8) + ((h - 1) * 8) + (8 - antes);
 									
-				depois = localizar_bit(*(data_block + h + min_completos),'1',-1);// quantidade de bits zerados à esquerda do byte
+				depois = localizar_bit(*(data_block + h + min_completos + 1),'1',-1);// quantidade de bits zerados à esquerda do byte
 				aux -= depois;
 				
 				if(aux <= 0)
-					return j * (BLOCK_SIZE * 8) + (h * 8) - antes;
+					return j * (BLOCK_SIZE * 8) + (h * 8) + (8 - antes);
 			}
 		
 		}
-		
-		for(k = 1;h < BLOCK_SIZE; h++, k++)
+
+		for(k = 0;h < BLOCK_SIZE; h++, k++)
 		{
+			if(min_completos == 0)
+			{
+				if(memcmp(data_block + h, vazio, 1) != 255)
+				{
+					antes = localizar_bit(data_block[h], '1', 1);
+					
+					if(antes + 1 < 8)
+					{
+						aux = resto - (8 - (antes + 1));
+						
+						if(aux <= 0)
+						{
+							return j * (BLOCK_SIZE * 8) + (h * 8) + (antes + 1);
+						}
+						else
+						{
+							if(h + 1 == BLOCK_SIZE)
+							{
+								if ((depois = get_block_sequence(fd,(i - comeco) + 1,sb, aux)) == -1)
+									return -1;
+							}
+							else
+							{
+								depois = localizar_bit(data_block[h + 1], '1', -1);
+							}
+							
+							if(aux - depois <= 0)
+							{
+								return j * (BLOCK_SIZE * 8) + (h * 8) + (antes + 1);
+							}
+						}
+					}
+				}
+			}
+		
 			if( memcmp(data_block + h, vazio, min_completos - k) == 0)
 			{
 				antes = 0;
 				if(h > 0)
 				{
-					antes = 8 - localizar_bit(*(data_block + h),'1',1); // quantidade de bits zerados na direita do byte
+					antes = 8 - (localizar_bit(*(data_block + h - 1),'1',1) + 1); // quantidade de bits zerados na direita do byte
 				}
 				
+				// bits zerados até o fim do block, então precisamos olhar no próximo
 				if(get_block_sequence(fd, (i - comeco) + 1, sb, qtd - (8 *(min_completos - k) + antes)) == (i + 1)*(BLOCK_SIZE * 8))// caso retorne a primeira posição do proximo bloco então temos uma área contigua 
-					return j * (BLOCK_SIZE * 8) + (h * 8) - antes;
-						
+					return j * (BLOCK_SIZE * 8) + (h * 8) + (8 - antes);	
 			}
 		}
 	

@@ -40,7 +40,6 @@ long int abrir_dispositivo(const char *pathname, int *fd)
 	return block_number;
 }
 
-
 /*
 ler_bloco
 ----------

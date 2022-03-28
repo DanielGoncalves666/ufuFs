@@ -1,6 +1,3 @@
-#ifndef UFUFS_FORMAT_H
-#define UFUFS_FORMAT_H
-
 /*
 Módulo de formatação
 
@@ -41,8 +38,8 @@ int main()
 	
 	bc = calloc(1,BLOCK_SIZE);
 	resul = ler_bloco(div_fd,0,bc); // carrega o bloco onde o superblock deveria estar
-	if(resul == 0)
-		return 0; // falha
+	//if(resul == 0) Não ocorre erros aqui
+	//	return 0; // falha
 
 	memcpy(&sb, bc, sizeof(superblock));
 	free(bc);
@@ -137,6 +134,3 @@ inode criar_inode_raiz()
 	return raiz;
 }
 
-
-
-#endif

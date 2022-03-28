@@ -39,7 +39,7 @@ typedef struct inode
 	int inode_num;
 	struct dataTime criacao;
 	struct dataTime acesso; 
-	unsigned int tamanho; // tamanho, em bytes, se for um arquivo. tamanho, em quantidade de entradas, se for um diretório.
+	unsigned int tamanho; // tamanho, em byteso.
 	
 	int bloco_inicial; // bloco de dados inicial
 	int bloco_final; // bloco de dados final
