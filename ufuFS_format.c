@@ -22,7 +22,7 @@ int main()
 {
 	char pathname[25];
 	int div_fd;
-	int size, resul, escolha;
+	int size, escolha;
 	superblock sb;
 	void *bc;
 
@@ -37,7 +37,7 @@ int main()
 	}
 	
 	bc = calloc(1,BLOCK_SIZE);
-	resul = ler_bloco(div_fd,0,bc); // carrega o bloco onde o superblock deveria estar
+	ler_bloco(div_fd,0,bc); // carrega o bloco onde o superblock deveria estar
 	//if(resul == 0) Não ocorre erros aqui
 	//	return 0; // falha
 
@@ -93,7 +93,7 @@ int main()
 	
 	inode raiz = criar_inode_raiz();// cria inode raiz
 	alterar_bitmap(div_fd,0,sb,2);// marca a posição inode 0 como ocupada
-	write_inode(div_fd,sb.file_table_begin,0, &raiz); // escreve o inode em disco
+	write_inode(div_fd,sb.file_table_begin,ROOT_DIRECTORY_INODE, &raiz); // escreve o inode em disco
 		
 	dir_entry itself = {0,"."}; // cria a entrada que aponta pro próprio diretório
 	bc = calloc(1,BLOCK_SIZE); // cria um bloco vazio
@@ -117,7 +117,7 @@ inode criar_inode_raiz()
 	agora = localtime(&raw);
 	
 	raiz.tipo = DIRETORIO;
-	raiz.inode_num = 0;
+	raiz.inode_num = ROOT_DIRECTORY_INODE;
 	raiz.criacao.dia = agora->tm_mday;
 	raiz.criacao.mes = agora->tm_mon + 1; 
 	raiz.criacao.ano = agora->tm_year + 1900;

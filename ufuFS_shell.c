@@ -158,6 +158,8 @@ void ufuFS_shell()
   		{
   			arg1 = strtok (NULL, " ");
   			arg2 = strtok (NULL, " ");
+  			
+  				printf("%s %s",arg1,arg2);
   			if(arg1 == NULL || arg2 == NULL)
   			{
   				printf("\nArgumentos insuficientes.\n");
@@ -216,7 +218,7 @@ void ufuFS_list(char *caminho)
 		printf("\nErro na abertura.");
 		return;
 	}
-		printf("%d",qtd_entradas);
+
 	for(h = 0; h < qtd_entradas;)
 	{
 		if(ufufs_read(retorno,buffer, sizeof(dir_entry)) == -1)
@@ -233,8 +235,8 @@ void ufuFS_list(char *caminho)
 		printf("Acesso: %02d:%02d:%02d %02d/%02d/%d\t", entrada.acesso.hora, entrada.acesso.minuto, entrada.acesso.segundo, entrada.acesso.dia, entrada.acesso.mes, entrada.acesso.ano);
 		printf("Tamanho: %5u bytes\n",entrada.tamanho);
 			
-			h++;
-		}
+		h++;
+	}
 	
 	free(buffer);
 	ufufs_close(retorno);
@@ -312,7 +314,7 @@ void copy_ufufs_to_real(char *aqui, char *real)
 	int tamanho;
 	void *buffer = calloc(1,BLOCK_SIZE);
 
-	if((aqui_fd = ufufs_open(aqui, READ_ONLY)) == -1)
+	if((aqui_fd = ufufs_open("/", READ_ONLY)) == -1)
 	{
 		printf("\nArquivo %s não encontrado.\n",aqui);
 		return;
@@ -324,23 +326,31 @@ void copy_ufufs_to_real(char *aqui, char *real)
 		return;
 	}
 	
+	int ler;
 	tamanho = ufufs_size(aqui_fd);
 	while(tamanho > 0)
 	{
-		if( ufufs_read(aqui_fd, buffer, BLOCK_SIZE) == -1)
+		if(tamanho < BLOCK_SIZE)
+			ler = tamanho;
+		else
+			ler = BLOCK_SIZE;
+	
+		if( ufufs_read(aqui_fd, buffer, ler) == -1)
 		{
 			printf("\nFalha durante a operação de cópia (leitura).\n");
 			return;
 		}
 		
-		if( write(real_fd, buffer, BLOCK_SIZE) == -1)
+		if( write(real_fd, buffer, ler) == -1)
 		{
 			printf("\nFalha durante a operação de cópia (escrita).\n");
 			return;
 		}
 		
-		tamanho -= BLOCK_SIZE;
+		tamanho -= ler;
 	}
+
+	printf("\nCópia concluída.\n");
 
 	ufufs_close(aqui_fd);
 	close(real_fd);
