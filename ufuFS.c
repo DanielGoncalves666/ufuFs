@@ -90,7 +90,7 @@ int ufufs_open(char *pathname, int flags)
 	
 	int retorno = read_inode(div_fd,sb.file_table_begin,ROOT_DIRECTORY_INODE,&atual);// carrega o inode do diretório raiz
 	strcpy(entrada.nome,"/");
-	entrada.numero_inode = 0;
+	entrada.numero_inode = ROOT_DIRECTORY_INODE;
 
 	if(!retorno)
 		return -1;
@@ -101,7 +101,6 @@ int ufufs_open(char *pathname, int flags)
 		// se token for uma string vazia então temos em dir o inode do arquivo que queremos
 		if(token == NULL)
 			break;
-		
 
 		h = 0;
 		qtd = atual.tamanho / sizeof(dir_entry);
@@ -140,8 +139,8 @@ int ufufs_open(char *pathname, int flags)
 			if(h == -1)
 				break;	
 		}
-		
 		token = strtok(NULL, "/");
+
 	}while(1);
 
 	free(buffer);

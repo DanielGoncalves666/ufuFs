@@ -68,7 +68,7 @@ int main()
 				if( (valor = ufufs_read(fd,c,valor)) == -1)
 				{
 					printf("Falha durante a leitura.\n");
-					break;x
+					break;
 				}
 				
 				if(valor == 0)
