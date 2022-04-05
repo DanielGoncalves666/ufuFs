@@ -15,10 +15,10 @@ extern superblock sb;
 extern int div_fd;
 extern file_descriptor *fd_table[MAXIMUM_OPEN_FILES];
 
-void ufuFS_help();
-void ufuFS_shell();
-void ufuFS_list(char *caminho);
-void ufufs_create_arquivo(char *caminho, char *nome);
+void ufufs_help();
+void ufufs_shell();
+void ufufs_list(char *caminho);
+int ufufs_create_arquivo(char *caminho, char *nome);
 void ufufs_create_directory(char *caminho, char *nome);
 void ufufs_delete(char *caminho, char *nome);
 void copy_real_to_ufufs(char *real, char *caminho, char *nome);
@@ -28,12 +28,19 @@ void ufufs_write_shell(char *caminho_nome);
 
 int main()
 {
-	ufuFS_shell();
+	ufufs_shell();
 
 	return 0;
 }
 
-void ufuFS_help()
+/*
+ufufs_help
+------------
+Entrada: nada
+Descrição: mostra os comandos disponíveis
+Saída: nada
+*/
+void ufufs_help()
 {
     printf("Lista de Comandos:\n");
     printf("Obs: Espaços separam o comando de seus argumentos\n");
@@ -49,15 +56,16 @@ void ufuFS_help()
     printf("\thelp\n"); // mostra esta lista
     printf("\texit\n"); // fecha o programa
 }
-/*
-void limparBuffer()
-{
-	char tipo;
-	while ((tipo = getchar()) != '\n' && tipo != EOF);				
-}
-*/
 
-void ufuFS_shell()
+
+/*
+ufufs_shell
+------------
+Entrada: nada
+Descrição: realiza a montagem do pendrive e a dinâmica de recebimento e processamento de comandos
+Saída: nada
+*/
+void ufufs_shell()
 {
 	// argumentos extras são ignorados
 
@@ -158,7 +166,7 @@ void ufuFS_shell()
   				continue;
   			}
   			
-  			ufuFS_list(arg1);
+  			ufufs_list(arg1);
   		}
   		else if(strcmp(comando,"copy_ufufs_to_real") == 0)
   		{
@@ -213,7 +221,7 @@ void ufuFS_shell()
   		}
   		else if(strcmp(comando,"help") == 0)
   		{
-  			ufuFS_help();
+  			ufufs_help();
   		}
   		else if(strcmp(comando,"exit") == 0)
   		{
@@ -227,8 +235,14 @@ void ufuFS_shell()
   	}
 }
 
-
-void ufuFS_list(char *caminho)
+/*
+ufufs_list
+------------
+Entrada: string indicando o diretório a ser mostrado
+Descrição: printa na tela todos os arquivos e diretórios, e suas informações, que estão contidos no diretório passado
+Saída: nada
+*/
+void ufufs_list(char *caminho)
 {
 	inode entrada;
 	int qtd_entradas;
@@ -264,9 +278,14 @@ void ufuFS_list(char *caminho)
 	ufufs_close(atual_fd);
 }
 
-
-// create_file <caminho> <nome>       cria um arquivo vazio, caminho precisa terminar em um diretório
-void ufufs_create_arquivo(char *caminho, char *nome)
+/*
+ufufs_create_arquivo
+------------
+Entrada: string indicando o diretório onde o arquivo deve ser criado, string indicando o nome do arquivo
+Descrição: cria um arquivo vazio no diretório indicado por caminho
+Saída: nada
+*/
+int ufufs_create_arquivo(char *caminho, char *nome)
 {
 	int caminho_fd;// file descriptor do diretório onde se quer criar o arquivo
 	int retorno;
@@ -274,19 +293,19 @@ void ufufs_create_arquivo(char *caminho, char *nome)
 	if( strcmp(nome, "/") == 0)
 	{
 		printf("Nome inválido.\n");
-		return;
+		return 0;
 	}
 	
 	if((caminho_fd = ufufs_open(caminho, WRITE_ONLY)) == -1)
 	{
 		printf("Caminho inexistente.\n");
-		return;
+		return 0;
 	}
 	
 	if(ufufs_tipo(caminho_fd) != DIRETORIO)
 	{
 		printf("Caminhos terminando em arquivo são inválidos.\n");
-		return;
+		return 0;
 	}
 
 	// cria e preenche o inode
@@ -302,14 +321,14 @@ void ufufs_create_arquivo(char *caminho, char *nome)
 	if(novo.bloco_inicial == -1)
 	{
 		printf("Espaço insuficiente em disco para a criação do arquivo.\n");
-		return;
+		return 0;
 	}
 	
 	retorno = write_inode(div_fd, sb.file_table_begin, novo.inode_num, &novo); // escreve o inode no disco
 	if(retorno == 0)
 	{
 		printf("Quantidade máxima de arquivos em disco foi atingida.\n");
-		return;
+		return 0;
 	}
 	
 	alterar_bitmap(div_fd, novo.inode_num,sb, 2); // altera bitmap de inodes
@@ -331,14 +350,22 @@ void ufufs_create_arquivo(char *caminho, char *nome)
 		alterar_faixa_bitmap(div_fd,novo.bloco_inicial, novo.bloco_final,sb);
 		//reverte as alterações no bitmap
 		
-		return;
+		return 0;
 	}
 	
 	ufufs_close(caminho_fd);
 	
 	printf("\nArquivo criado com sucesso!\n");
+	return 1;
 }
 
+/*
+ufufs_create_diretorio
+------------
+Entrada: string indicando o diretório onde o diretório deve ser criado, string indicando o nome do diretório
+Descrição: cria um diretório no diretório indicando por caminho
+Saída: nada
+*/
 void ufufs_create_directory(char *caminho, char *nome)
 {
 	int caminho_fd;// file descriptor do diretório onde se quer criar o diretório
@@ -445,6 +472,13 @@ void ufufs_create_directory(char *caminho, char *nome)
 
 }
 
+/*
+ufufs_delete
+------------
+Entrada: string indicando o diretório onde o o arquivo ou diretório a ser excluída está localizado, string indicando o nome do arquivo ou diretório a ser excluído
+Descrição: exclui o arquivo ou diretório (se estiver vazio) localizado no diretório indicado por caminho.
+Saída: nada
+*/
 void ufufs_delete(char *caminho, char *nome)
 {
 	int excluir_fd;
@@ -554,22 +588,31 @@ void ufufs_delete(char *caminho, char *nome)
 	printf("Arquivo ou diretório excluído com sucesso.\n");
 }
 
+/*
+copy_ufufs_to_real
+------------
+Entrada: string indicando o caminho e nome do arquivo local, string indicando caminho e nome do arquivo no sistema linux
+Descrição: copia o conteúdo do arquivo indicando por aqui para um arquivo no sistema linux indicado por real.
+Saída: nada
+*/
 void copy_ufufs_to_real(char *aqui, char *real)
 {
+	// como o arquivo criado no sistema real herda as permissões do processo que o cria é necessário permissão de administrador pra ler seu conteúdo
+
 	int real_fd;
 	int aqui_fd;
 	int tamanho;
 	void *buffer = calloc(1,BLOCK_SIZE);
 
-	if((aqui_fd = ufufs_open("/", READ_ONLY)) == -1)
+	if((aqui_fd = ufufs_open(aqui, READ_ONLY)) == -1)
 	{
-		printf("\nArquivo %s não encontrado.\n",aqui);
+		printf("\nArquivo %s não encontrado no ufufs.\n",aqui);
 		return;
 	}
 	
-	if( (real_fd = open(real,O_WRONLY)) == -1 )
+	if( (real_fd = open(real, O_WRONLY | O_CREAT)) == -1 )
 	{
-		printf("\nArquivo %s não encontrado.\n",real);
+		printf("\nArquivo %s não pode ser criado.\n",real);
 		return;
 	}
 	
@@ -604,37 +647,59 @@ void copy_ufufs_to_real(char *aqui, char *real)
 	free(buffer);
 }
 
-
+/*
+copy_real_to_ufufs
+------------
+Entrada: string indicando o caminho e nome do arquivo no sistema linux, string indicando o caminho no ufufs, string indicando o nome no ufufs
+Descrição: copia o conteúdo do arquivo indicando por real para um arquivo no sistema linux indicado por caminho/nome
+Saída: nada
+*/
 void copy_real_to_ufufs(char *real, char *caminho, char *nome)
 {
 	int real_fd;
 	int aqui_fd;
 	int tamanho;
+	char nome_aux[250];
 	void *buffer = calloc(1,BLOCK_SIZE);
 	
-	if( (real_fd = open(real,O_WRONLY)) == -1 )
+	strcpy(nome_aux, caminho);
+	if(nome_aux[strlen(nome_aux) -1] != '/')
+		strcat(nome_aux,"/");
+	strcat(nome_aux, nome);
+	
+	if( (real_fd = open(real,O_RDONLY)) == -1 )
 	{
 		printf("\nArquivo %s não encontrado.\n",real);
 		return;
 	}
 	
-	// cria o arquivo e então abre ele
-	if( (aqui_fd = ufufs_open(caminho, WRITE_ONLY)) == -1)
+	if( ufufs_create_arquivo(caminho,nome) == 0)
+		return;
+     
+    
+	if( (aqui_fd = ufufs_open(nome_aux, WRITE_ONLY)) == -1)
 	{
-		printf("\nArquivo %s%s não encontrado.\n",caminho,nome);
+		printf("\nArquivo %s/%s não encontrado.\n",caminho,nome);
 		return;
 	}
 	
+	int ler;
 	tamanho = lseek(real_fd, 0, SEEK_END);
+	lseek(real_fd, 0, SEEK_SET);
 	while(tamanho > 0)
 	{
-		if(read(real_fd, buffer, BLOCK_SIZE) == -1)
+		if(tamanho < BLOCK_SIZE)
+			ler = tamanho;
+		else
+			ler = BLOCK_SIZE;
+	
+		if(read(real_fd, buffer, ler) == -1)
 		{
 			printf("\nFalha durante a operação de cópia (leitura).\n");
 			return;
 		}
 		
-		if( ufufs_write(aqui_fd, buffer, BLOCK_SIZE) == -1)
+		if( ufufs_write(aqui_fd, buffer, ler) == -1)
 		{
 			printf("\nFalha durante a operação de cópia (escrita).\n");
 			return;
@@ -643,11 +708,20 @@ void copy_real_to_ufufs(char *real, char *caminho, char *nome)
 		tamanho -= BLOCK_SIZE;
 	}
 	
+	printf("Cópia concluída.\n");
+	
 	ufufs_close(aqui_fd);
 	close(real_fd);
 	free(buffer);	
 }
 
+/*
+ufufs_read_shell
+------------
+Entrada: string indicando o arquivo a ser lido
+Descrição: lê do arquivo passado
+Saída: nada
+*/
 void ufufs_read_shell(char *caminho_nome)
 {
 	int arquivo_fd;
@@ -715,6 +789,13 @@ void ufufs_read_shell(char *caminho_nome)
 	ufufs_close(arquivo_fd);			
 }
 
+/*
+ufufs_write_shell
+------------
+Entrada: string indicando o arquivo a ser escrita
+Descrição: escreve no arquivo passado
+Saída: nada
+*/
 void ufufs_write_shell(char *caminho_nome)
 {
 	int arquivo_fd;
@@ -781,5 +862,3 @@ void ufufs_write_shell(char *caminho_nome)
 	free(escrita);			
 	ufufs_close(arquivo_fd);
 }
-
-
