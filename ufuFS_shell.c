@@ -20,7 +20,7 @@ void ufuFS_shell();
 void ufuFS_list(char *caminho);
 void ufufs_create_arquivo(char *caminho, char *nome);
 void ufufs_create_directory(char *caminho, char *nome);
-void ufufs_delete(char *caminho_nome);
+void ufufs_delete(char *caminho, char *nome);
 void copy_real_to_ufufs(char *real, char *caminho, char *nome);
 void copy_ufufs_to_real(char *aqui, char *real);
 
@@ -37,7 +37,7 @@ void ufuFS_help()
     printf("Obs: Espaços separam o comando de seus argumentos\n");
     printf("\tcreate_arq <caminho> <nome>\n"); // caminho precisa terminar em um diretório
     printf("\tcreate_dir <caminho> <nome>\n"); // caminho precisa terminar em um diretório
-    printf("\tdelete <caminho/nome>\n"); // se for um diretório precisa estar vazio
+    printf("\tdelete <caminho> <nome>\n"); // se for um diretório precisa estar vazio
     printf("\tlist <caminho>\n"); // se for um arquivo lista somente as informações dele 
     printf("\tcopy_ufufs_to_real <ufu_arquivo> <real_arquivo>\n"); 
     printf("\tcopy_real_to_ufufs <real_arquivo> <caminho> <nome>\n");// caminho precisa terminar em um diretório
@@ -135,13 +135,14 @@ void ufuFS_shell()
   		else if(strcmp(comando,"delete") == 0)
   		{
   			arg1 = strtok (NULL, " ");
-  			if(arg1 == NULL)
+  			arg2 = strtok (NULL, " ");
+  			if(arg1 == NULL || arg2 == NULL)
   			{
   				printf("\nArgumentos insuficientes.\n");
   				continue;
   			}
   			
-  			ufufs_delete(arg1);
+  			ufufs_delete(arg1,arg2);
   		}
   		else if(strcmp(comando,"list") == 0)
   		{
@@ -217,7 +218,7 @@ void ufuFS_list(char *caminho)
 	}
 
 	qtd_entradas = fd_table[atual_fd]->tamanho / sizeof(dir_entry); // calcula a quantidade de entradas válidas no diretório
-	for(h = 0; h < qtd_entradas;)
+	for(h = 0; h < qtd_entradas;h++)
 	{
 		if(ufufs_read(atual_fd,buffer, sizeof(dir_entry)) == -1)
 			break;
@@ -232,8 +233,6 @@ void ufuFS_list(char *caminho)
 		printf("Criação: %02d:%02d:%02d %02d/%02d/%d\t", entrada.criacao.hora, entrada.criacao.minuto, entrada.criacao.segundo, entrada.criacao.dia, entrada.criacao.mes, entrada.criacao.ano);
 		printf("Acesso: %02d:%02d:%02d %02d/%02d/%d\t", entrada.acesso.hora, entrada.acesso.minuto, entrada.acesso.segundo, entrada.acesso.dia, entrada.acesso.mes, entrada.acesso.ano);
 		printf("Tamanho: %5u bytes\n",entrada.tamanho);
-			
-		h++;
 	}
 	
 	free(buffer);
@@ -246,6 +245,12 @@ void ufufs_create_arquivo(char *caminho, char *nome)
 {
 	int caminho_fd;// file descriptor do diretório onde se quer criar o arquivo
 	int retorno;
+	
+	if( strcmp(nome, "/") == 0)
+	{
+		printf("Nome inválido.\n");
+		return;
+	}
 	
 	if((caminho_fd = ufufs_open(caminho, WRITE_ONLY)) == -1)
 	{
@@ -315,6 +320,12 @@ void ufufs_create_directory(char *caminho, char *nome)
 	int atual_fd;
 	int retorno;
 	
+	if( strcmp(nome, "/") == 0)
+	{
+		printf("Nome inválido.\n");
+		return;
+	}
+	
 	if((caminho_fd = ufufs_open(caminho, WRITE_ONLY)) == -1)
 	{
 		printf("Caminho inexistente.\n");
@@ -382,7 +393,6 @@ void ufufs_create_directory(char *caminho, char *nome)
 		strcat(novo_caminho,"/");
 		
 	strcat(novo_caminho,nome);
-	printf("%s\n",novo_caminho);
 	if( (atual_fd = ufufs_open(novo_caminho,WRITE_ONLY)) == -1)
 	{
 		printf("Falha na abertura do arquivo criado.\n");
@@ -410,18 +420,113 @@ void ufufs_create_directory(char *caminho, char *nome)
 
 }
 
-void ufufs_delete(char *caminho_nome)
+void ufufs_delete(char *caminho, char *nome)
 {
-	/*
-	excluir arquivos e diretórios
+	int excluir_fd;
+	int diretorio_fd;
+	int qtd_entradas, validas;
+	char nome_aux[250];
+	int i, h, j;
+	dir_entry *buffer = (dir_entry *) calloc(1,sizeof(dir_entry));
 	
-	localiza o arquivo a ser excluido
-	desmarca o bitmap de dados
-	desmarca o bitmap do inode
-	zera o inode
-	remove a entrada do diretório
-*/
+	strcpy(nome_aux, caminho);
+	if(nome_aux[strlen(nome_aux) -1] != '/')
+		strcat(nome_aux,"/");
+	strcat(nome_aux, nome);
+	
+	if(strcmp(nome_aux, "/.") == 0 || strcmp(nome_aux, "//") == 0)
+	{
+		printf("Impossível excluir o diretório raiz.\n");
+		return;
+	}
 
+	if((excluir_fd = ufufs_open(nome_aux, READ_WRITE)) == -1)
+	{
+		printf("Arquivo ou diretório inexistente.\n");
+		return;
+	}
+	
+	if(ufufs_tipo(excluir_fd) == DIRETORIO)
+	{
+		// verifica se o diretório está vazio
+		qtd_entradas =  ufufs_size(excluir_fd) / sizeof(dir_entry);
+		validas = 0;
+		for(i = 0; i < qtd_entradas; i++)
+		{
+			if(ufufs_read(excluir_fd,buffer, sizeof(dir_entry)) == -1)
+				break;
+				
+			if(buffer->numero_inode == -1)
+				continue;// entrada de um arquivo que foi excluído
+			else
+				validas++;
+		}
+		
+		if(validas != 2)
+		{
+			printf("Apenas diretórios vazios podem ser excluídos\n");
+			return;	
+		}
+	}	
+
+	if((diretorio_fd = ufufs_open(caminho, READ_WRITE)) == -1)
+	{
+		printf("Falha na abertura do diretório que o arquivo está contido.\n");
+		return;
+	}
+	
+	inode *in = (inode *) calloc(1,sizeof(inode));	
+	write_inode(div_fd, sb.file_table_begin, fd_table[excluir_fd]->inode_data.inode_num, in);
+	free(in);
+	
+	alterar_bitmap(div_fd,fd_table[excluir_fd]->inode_data.inode_num,sb,2); // marca no bitmap o inode correspondente como desocupado
+	alterar_faixa_bitmap(div_fd, fd_table[excluir_fd]->inode_data.bloco_inicial, fd_table[excluir_fd]->inode_data.bloco_final, sb); // marca no bitmap a desocupação dos blocos de dados
+	
+	void *bc = (unsigned char *) calloc(1,BLOCK_SIZE);
+	
+	qtd_entradas = ufufs_size(diretorio_fd) / sizeof(dir_entry);
+
+	i = 0;
+	for(h = fd_table[diretorio_fd]->inode_data.bloco_inicial; h <= fd_table[diretorio_fd]->inode_data.bloco_final; h++)
+	{
+		if(ler_bloco(div_fd,sb.data_table_begin + h,bc) == 0)
+			return;
+			
+		for(j = 0; j < BLOCK_SIZE / sizeof(dir_entry); j++)
+		{
+			i++;
+			
+			if(i > qtd_entradas)
+			{
+				break;
+			}
+		
+			memcpy(buffer, bc + j * sizeof(dir_entry), sizeof(dir_entry));
+			if(buffer->numero_inode == fd_table[excluir_fd]->inode_data.inode_num)
+			{
+				buffer->numero_inode = -1; // marca como inválido
+				memcpy(bc + j * sizeof(dir_entry), buffer, sizeof(dir_entry));
+				
+				escrever_bloco(div_fd, sb.data_table_begin + h, bc);
+				i = -1;
+				
+				break;
+			}
+		}	
+		
+		if(i == -1)
+			break;
+	}
+	
+	free(buffer);
+	free(bc);
+	
+	ufufs_close(diretorio_fd);
+	ufufs_close(excluir_fd);
+	
+	// não ocorre atualização de horário no diretório
+
+	printf("Arquivo ou diretório excluído com sucesso.\n");
 }
 
 void copy_ufufs_to_real(char *aqui, char *real)

@@ -108,7 +108,7 @@ int ufufs_open(char *pathname, int flags)
 		{
 			ler_bloco(div_fd, sb.data_table_begin + i, buffer);
 			offset = 0;
-			while(h < qtd)
+			for(;h < qtd; h++)
 			{
 				memcpy(&entrada,buffer + offset,sizeof(dir_entry));
 				offset += sizeof(dir_entry);
@@ -126,8 +126,6 @@ int ufufs_open(char *pathname, int flags)
 					h = -1;
 					break;
 				}
-				
-				h++;
 			}
 			
 			if(h == qtd)
