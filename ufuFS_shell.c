@@ -23,6 +23,8 @@ void ufufs_create_directory(char *caminho, char *nome);
 void ufufs_delete(char *caminho, char *nome);
 void copy_real_to_ufufs(char *real, char *caminho, char *nome);
 void copy_ufufs_to_real(char *aqui, char *real);
+void ufufs_read_shell(char *caminho_nome);
+void ufufs_write_shell(char *caminho_nome);
 
 int main()
 {
@@ -41,6 +43,8 @@ void ufuFS_help()
     printf("\tlist <caminho>\n"); // se for um arquivo lista somente as informações dele 
     printf("\tcopy_ufufs_to_real <ufu_arquivo> <real_arquivo>\n"); 
     printf("\tcopy_real_to_ufufs <real_arquivo> <caminho> <nome>\n");// caminho precisa terminar em um diretório
+    printf("\twrite <caminho_nome>\n"); // caminho_nome precisa ser um arquivo
+    printf("\tread <caminho_nome>\n"); // caminho_nome precisa ser um arquivo
     printf("\tclear\n"); // limpa a tela
     printf("\thelp\n"); // mostra esta lista
     printf("\texit\n"); // fecha o programa
@@ -55,6 +59,8 @@ void limparBuffer()
 
 void ufuFS_shell()
 {
+	// argumentos extras são ignorados
+
 	char nome_dispositivo[15], linha_comando[256];
 	int check;
 	int device_file_montado = -1;
@@ -67,7 +73,6 @@ void ufuFS_shell()
 	{
 	  	if(device_file_montado <= 0)
 	  	{
-	  		printf("\nDispositivo desconectado.\n");
 		  	printf("\nInsira o nome (ex: /dev/sdXX) do dispositivo que contenha um ufuFS para montá-lo.\n");
 		  	scanf("%s",nome_dispositivo);
 		  	if(device_file_montado == -1 && ufufs_mount(nome_dispositivo) == 0)
@@ -181,6 +186,26 @@ void ufuFS_shell()
   			}
   			
   			copy_real_to_ufufs(arg1,arg2,arg3);
+  		}
+  		else if(strcmp(comando,"write") == 0)
+  		{
+  			arg1 = strtok (NULL, " ");
+  			if(arg1 == NULL)
+  			{
+  				printf("\nArgumentos insuficientes.\n");
+  				continue;
+  			}
+  			ufufs_write_shell(arg1);
+  		}
+  		else if(strcmp(comando,"read") == 0)
+  		{
+  			arg1 = strtok (NULL, " ");
+  			if(arg1 == NULL)
+  			{
+  				printf("\nArgumentos insuficientes.\n");
+  				continue;
+  			}
+  			ufufs_read_shell(arg1);
   		}
   		else if(strcmp(comando,"clear") == 0)
   		{
@@ -623,5 +648,138 @@ void copy_real_to_ufufs(char *real, char *caminho, char *nome)
 	free(buffer);	
 }
 
+void ufufs_read_shell(char *caminho_nome)
+{
+	int arquivo_fd;
+	int i;
+	unsigned int posicao, qtd;
+	unsigned char *leitura;
+	
+	if((arquivo_fd = ufufs_open(caminho_nome, READ_ONLY)) == -1)
+	{
+		printf("Arquivo inexistente.\n");
+		return;
+	}
+	
+	if( ufufs_tipo(arquivo_fd) == DIRETORIO)
+	{
+		printf("Não é possível ler de um diretório.\n");
+		return;
+	}
+	
+	printf("Entre com a posição onde a leitura deve iniciar:\n");
+	scanf("%u",&posicao);
+	
+	if( ufufs_seek(arquivo_fd,posicao,SEEK_SET_UFU) == -1)
+	{
+		printf("Falha durante o reposicionamento.\n");
+		ufufs_close(arquivo_fd);
+		return;
+	}
+	
+	printf("Entre com a quantidade de bytes que deseja ler ( 0 para o restante do arquivo ):\n");
+	scanf("%u",&qtd);
+			
+	
+	if( qtd == 0)
+		qtd = ufufs_size(arquivo_fd) - ufufs_offset(arquivo_fd);
+				
+	leitura = (unsigned char *) malloc(sizeof(unsigned char) * qtd);
+				
+	if( (qtd = ufufs_read(arquivo_fd,leitura,qtd)) == -1)
+	{
+		printf("Falha durante a leitura.\n");
+		ufufs_close(arquivo_fd);
+		return;	
+	}
+				
+	if(qtd == 0)
+	{
+		printf("Nada lido\n");
+		ufufs_close(arquivo_fd);
+		return;
+	}
+				
+	for(i = 0; i < qtd; i++)
+	{
+		if( i % 100 == 0)
+		{
+			printf("\n%d ", i / 100);
+		}
+	
+		printf("%c", (char) leitura[i]);
+	}
+	printf("\n\n");
+	
+	free(leitura);			
+	ufufs_close(arquivo_fd);			
+}
+
+void ufufs_write_shell(char *caminho_nome)
+{
+	int arquivo_fd;
+	int i;
+	unsigned int posicao, qtd;
+	unsigned char *escrita;
+	
+	if((arquivo_fd = ufufs_open(caminho_nome, WRITE_ONLY)) == -1)
+	{
+		printf("Arquivo inexistente.\n");
+		return;
+	}
+	
+	if( ufufs_tipo(arquivo_fd) == DIRETORIO)
+	{
+		printf("Não é possível escrever em um diretório.\n");
+		return;
+	}
+	
+	printf("Entre com a posição onde a escrita deve iniciar:\n");
+	scanf("%u",&posicao);
+	
+	if( ufufs_seek(arquivo_fd,posicao,SEEK_SET_UFU) == -1)
+	{
+		printf("Falha durante o reposicionamento.\n");
+		ufufs_close(arquivo_fd);
+		return;
+	}
+	
+	printf("Entre com a quantidade de bytes que deseja escrever:\n");
+	scanf("%u",&qtd);
+			
+	if(qtd <= 0)
+	{
+		printf("Quantidade inválida.\n");
+		ufufs_close(arquivo_fd);
+		return;
+	}
+				
+	escrita = (unsigned char *) malloc(sizeof(unsigned char) * qtd);
+	
+	printf("Entre com o conteúdo a ser escrito: \n");
+	for(i = 0; i < qtd; i++)
+	{
+		scanf(" %c", escrita + i);
+	}
+	
+	if( (qtd = ufufs_write(arquivo_fd,escrita,qtd)) == -1)
+	{
+		printf("Falha durante a escrita\n");
+		ufufs_close(arquivo_fd);
+		return;
+	}
+						
+	if(qtd == 0)
+	{
+		printf("Nada escrito\n");
+		ufufs_close(arquivo_fd);
+		return;
+	}
+				
+	printf("\nEscrita concluída com sucesso.\n");
+	
+	free(escrita);			
+	ufufs_close(arquivo_fd);
+}
 
 
