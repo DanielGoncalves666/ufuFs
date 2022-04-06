@@ -50,40 +50,68 @@ Saída: inteiro indicando o primeiro zero, da esquerda pra direita; -1 se não e
 */
 int localizar_bit(unsigned char valor, char bit, int sentido)
 {
-	char vetor[8] = {'0','0','0','0','0','0','0','0'};
-	int i = 7, resto, aux;
-	
-	
-	aux = valor;
-	while(aux != 0)
+	/*
+		O operador AND é 1 se ambos bit são 1 e 0 em qualquer outro caso.
+		No sentido da esquerda pra direita (-1) começamos com 128U e diminuímos até 1U, se a operação (valor AND potência) resultar em 0, então a posição
+			é 0, se for diferente de 0 aquele bit é 1.	
+	*/
+
+	int i;
+
+	if(sentido == -1)
 	{
-		resto = aux % 2;
-		aux /= 2;
-		
-		vetor[i] = resto == 1 ? '1' : '0';
-		i--;
-	}	
-	// preenche o vetor da direita pra esquerda de modo a deixar nele o número na ordem correta
-	
-	if( sentido == -1)
-	{
-		for(i = 0; i < 8; i++)
+		if(bit == '1')
 		{
-			if(vetor[i] == bit)
-				return i;
+			for(i = 0; i < 8; i++)
+			{
+				if( (valor & (128U >> i)) > 0)
+				{
+					// encontrou o primeiro 1 da esquerda pra direita
+					return i;
+				}
+			}
+		
 		}
-	
+		else
+		{
+			for(i = 0; i < 8; i++)
+			{
+				if( (valor & (128U >> i)) == 0)
+				{
+					// encontrou o primeiro 0 da esquerda pra direita
+					return i;
+				}
+			}
+		}
 	}
 	else if(sentido == 1)
 	{
-		for(i = 7; i >= 0; i--)
+		if(bit == '1')
 		{
-			if(vetor[i] == bit)
-				return i;
+			for(i = 0; i < 8; i++)
+			{
+				if( (valor & (1U << i)) > 0)
+				{
+					// encontrou o primeiro 1 da direita pra esquerda
+					return (7 - i);
+				}
+			}
+		
+		}
+		else
+		{
+			for(i = 0; i < 8; i++)
+			{
+				if( (valor & (1U << i)) == 0)
+				{
+					// encontrou o primeiro 0 da direita pra esquerda
+					return (7 - i);
+				}
+			}
 		}
 	}
-
-	return -1;
+	
+	return -1;// não existe nenhuma posição com o valor
 }
 
 /*
@@ -131,33 +159,19 @@ Entrada: um char, indicando um byte
 Descrição: inverte o bit de valor na posição indicada
 Saída: retorna o char valor com o bit em pos invertido
 */
-unsigned char inverter_bit(unsigned char valor, int pos)
-{
-	// erros de execução se pos for fora dos limites
+unsigned char inverter_bit(unsigned char valor, unsigned int pos)
+{ 
+	/* 
+	   128U em binário: 1000 0000
+	   pos determina a quantidade de posições que os bits devem ser deslocados para a direita ( >> ), 0 <= pos <= 7
+	   o ^ é o operador de bitwase XOR, bits iguais viram 0 e bits diferentes viram 1.
+	   
+	   Nessa função o segundo byte do XOR sempre terá apenas uma posição com 1. 
+	   Como todas as outras posições estarão zeradas e tendo-se em vista que 0 XOR 0 = 0 e 1 XOR 0 = 1, logo o resto do byte fica inalterado.
+	   O bit na única posição com 1 é então invertido, pois 1 XOR 1 = 0 e 0 XOR 1 = 1.
+	*/	
 	
-	int i = 7,h;
-	int resto, aux;
-	char vetor[8] = {'0','0','0','0','0','0','0','0'};
-	
-	aux = valor;
-	while(aux != 0)
-	{
-		resto = aux % 2;
-		aux /= 2;
-		
-		vetor[i] = resto == 1 ? '1' : '0';
-		i--;
-	}
-	
-	vetor[pos] = vetor[pos] == '1'? '0' : '1'; // inverte o bit da posição requerida
-	
-	aux = 0;
-	for(i = 7, h = 0; i >= 0; i--, h++)
-	{
-		aux += (vetor[i] == '1'? 1 : 0) * pow(2,h);
-	}
-	
-	return aux;	
+	return valor ^ (128U >> pos); 
 }
 
 /*
@@ -225,10 +239,7 @@ int alterar_faixa_bitmap(int fd, int inicio, int fim, superblock sb)
 		ler_bloco(fd,i,bitmap);
 		while(qtd > 8 && inside_offset < BLOCK_SIZE)
 		{
-			if(bitmap[inside_offset] == 0)// inverte o byte
-				bitmap[inside_offset] = 255;
-			else
-				bitmap[inside_offset] = 0;
+			bitmap[inside_offset] = ~ bitmap[inside_offset];
 
 			inicio += 8;
 			inside_offset++;
@@ -286,21 +297,12 @@ int get_bitmap_pos_status(int fd, int number, superblock sb, int tipo)
 	if( ler_bloco(fd,b,buffer) == 0)
 		return 0;
 
-	int i = 7;
-	int resto, aux;
-	char vetor[8] = {'0','0','0','0','0','0','0','0'};
-	
-	aux = buffer[offset];
-	while(aux != 0)
-	{
-		resto = aux % 2;
-		aux /= 2;
-		
-		vetor[i] = resto == 1 ? '1' : '0';
-		i--;
-	}
+	int aux = buffer[offset];
 
-	return vetor[final_offset] == '1'? 1 : 0;
+	if( (aux & (128U >> final_offset)) > 0)
+		return 1;
+	else
+		return 0;
 }
 
 /*
@@ -315,7 +317,7 @@ Saída: -1, se nenhuma sequencia foi encontra, um inteiro, indicando o bloco que
 */
 int get_block_sequence(int fd, int comeco, superblock sb, int qtd)
 {
-	// sempre que formos chamar essa função em um programa, comeco é zerado. É uma variável se uso da própria função
+	// sempre que formos chamar essa função em um programa, comeco é zerado. É uma variável de uso da própria função
 	int min_completos = (qtd / 8); // quantidade minima de bytes que precisam estar zerados, podem sobrar até 7 bits
 	int resto = qtd % 8;
 	unsigned char *data_block = (unsigned char *) calloc(1,BLOCK_SIZE);
